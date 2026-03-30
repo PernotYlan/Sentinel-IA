@@ -102,7 +102,7 @@ SENTINEL AI est aussi un **projet pédagogique**. Une partie du développement e
 
 | Partenaire | Rôle |
 |---|---|
-| [**Interface Numérique**](https://www.interface-numerique.net) | Maître d'œuvre — Architecture, développement, intégration |
+| [**Interface Numérique**](https://www.maintenance-informatique-et-reseaux.com/) | Maître d'œuvre — Architecture, développement, intégration |
 | [**SYNJ**](https://synj.fr) | Organisation du concours étudiant — Coordination, briefs, jury |
 | [**École Limayrac**](https://www.limayrac.fr/) | Partenaire pédagogique — Communication et contributions étudiantes |
 
