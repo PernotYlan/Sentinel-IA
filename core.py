@@ -31,6 +31,7 @@ def check_for_environment():
         
         with open("test", "r") as env:
             print(f"\n{env.read()}")
+    ## TODO: create a safety net for each input: eg. ip can't hold letter and such...
 
 def main():
     """
