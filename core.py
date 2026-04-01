@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 
+import redis
+import json
+from dotenv import load_dotenv
+import os
+
 def check_for_environment():
     """
     Verification d'existance d'environement -> Si abscent creation manuelle
@@ -33,11 +38,29 @@ def check_for_environment():
             print(f"\n{env.read()}")
     ## TODO: create a safety net for each input: eg. ip can't hold letter and such...
 
+def connect_redis():
+    load_dotenv(".env")
+    try:
+        r = redis.Redis(
+            host=os.getenv("REDIS_HOST"),
+            port=int(os.getenv("REDIS_PORT")),
+            password=os.getenv("REDIS_PASSWORD"),
+            decode_responses=True
+        )
+        r.ping()
+        print("\033[92mConnexion Redis OK\033[00m")
+        return r
+    except Exception as e:
+        print(f"\033[91mErreur connexion Redis: {e}\033[00m")
+        exit(1)
+
 def main():
     """
     Execution de la boucle de logique principale
     """
     check_for_environment()
+    ## TODO: add a return int to check_for_environment() to handle in case of error
+    connect_redis()
 
 if __name__ == "__main__":
     main()
