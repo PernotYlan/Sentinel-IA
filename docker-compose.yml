@@ -3,5 +3,6 @@ services:
     build: .
     stdin_open: true
     tty: true
+    network_mode: host
     volumes:
       - .:/app
