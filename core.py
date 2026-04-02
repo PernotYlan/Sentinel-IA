@@ -13,7 +13,7 @@ def check_for_environment():
         with open("test", "r") as env:
             print("\033[92mConfiguration presente\033[00m\ninitialisation\n")
             print(env.read())
-    
+
     except FileNotFoundError:
         print("\033[91mEnvironement non configurée\033[00m")
         with open("test", "w") as env:
@@ -33,7 +33,7 @@ def check_for_environment():
             env.write(f"REDIS_KEY={userInput}\n")
             userInput = input("Enter Redis Client ID:\n>")
             env.write(f"CLIENT_ID={userInput}")
-        
+
         with open("test", "r") as env:
             print(f"\n{env.read()}")
     ## TODO: create a safety net for each input: eg. ip can't hold letter and such...
@@ -59,7 +59,7 @@ def main():
     Execution de la boucle de logique principale
     """
     check_for_environment()
-    ## TODO: add a return int to check_for_environment() to handle in case of error
+    ## TODO: add a return to check_for_environment() to handle in case of error
     connect_redis()
 
 if __name__ == "__main__":
