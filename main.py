@@ -2,6 +2,7 @@
 
 from src.env import check_for_environment
 from src.redis import connect_redis, receiver_redis
+from src.db import init_db
 
 def main():
     """
@@ -9,6 +10,7 @@ def main():
     """
     check_for_environment()
     ## TODO: add a return to check_for_environment() to handle in case of error
+    init_db()
     r = connect_redis()
     receiver_redis(r)
 
