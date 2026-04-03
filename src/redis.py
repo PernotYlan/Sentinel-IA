@@ -1,5 +1,6 @@
 import redis
 from dotenv import load_dotenv
+from src.parser import parsing_service_selector
 import os
 
 def connect_redis():
@@ -30,4 +31,4 @@ def receiver_redis(r: redis.Redis):
     while 1:
         result = r.blpop(os.getenv("REDIS_KEY"), timeout=0)
         _, raw = result
-        print(raw)
+        parsing_service_selector(raw)
