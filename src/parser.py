@@ -30,8 +30,10 @@ def parsing_service_selector(raw: str):
     tags = data.get("tags", [])
 
     if "zeek" in tags:
-        parse_zeek(data)
+        nothing = parse_zeek(data)
+        nothing = "\033[92mAll Good\033[00m"
+        print(nothing);
     elif "beats_input_codec_plain_applied" in tags:
-        parse_syslog(data)
+        parse_syslog()
     else:
         dump_sqlite(data)
