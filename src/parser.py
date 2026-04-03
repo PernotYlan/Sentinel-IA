@@ -30,7 +30,6 @@ def parsing_service_selector(raw: str):
     ecrire qqch"""
     data = json.loads(raw)
     tags = data.get("tags", [])
-    print(f"TAGS: {tags}")
 
     if "zeek" in tags:
         parse_zeek(data)
@@ -41,6 +40,7 @@ def parsing_service_selector(raw: str):
         counters["syslog"] += 1
         print(f"\033[94mAll Good Syslog [{counters['syslog']}]\033[00m")
     else:
+        print(f"TAGS: {tags}")
         dump_sqlite(data)
         counters["db"] += 1
         print(f"\033[93mAll Good DB [{counters['db']}]\033[00m")
