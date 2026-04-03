@@ -6,6 +6,7 @@ def check_for_environment():
         with open("test", "r") as env:
             print("\033[92mConfiguration presente\033[00m\ninitialisation\n")
             print(env.read())
+    ## TODO: create have a query -> if found, do you want to modify it? ... (DISCLAMER DO IT SAFELY WE DONT WANT ENV TO BE READABLE IN HISTORY)
 
     except FileNotFoundError:
         print("\033[91mEnvironement non configurée\033[00m")
