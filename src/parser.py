@@ -1,4 +1,5 @@
 import json
+from src.db import dump_sqlite
 
 def parse_zeek(data: dict) -> dict:
     """
@@ -20,9 +21,6 @@ def parse_zeek(data: dict) -> dict:
     }
 
 def parse_syslog():
-    print("nuh uh")
-
-def dump_sqlite():
     print("nuh uh")
 
 def parsing_service_selector(raw: str):
