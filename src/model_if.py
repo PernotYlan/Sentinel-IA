@@ -28,8 +28,10 @@ def run_isolation_forest(window: deque):
         trained = True
         print(f"\033[92m[IF] Modele entraine sur {TRAIN_THRESHOLD} evenements\033[00m")
     scores = model.predict(features)
-    anomalies = [i for i, s in enumerate(scores) if s == -1]
-    if anomalies:
-        print(f"\033[91m[IF] {len(anomalies)} anomalie(s) detectee(s) sur 10 evenements\033[00m")
+    anomaly_indices = [i for i, s in enumerate(scores) if s == -1]
+    if anomaly_indices:
+        print(f"\033[91m[IF] {len(anomaly_indices)} anomalie(s) detectee(s) sur 10 evenements\033[00m")
+        return [list(window)[-10:][i] for i in anomaly_indices]
     else:
         print(f"\033[92m[IF] Normal\033[00m")
+        return None
