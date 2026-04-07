@@ -2,10 +2,11 @@ import json
 from collections import deque
 from src.db import dump_sqlite
 from src.model_if import run_isolation_forest
+from src.model_xgb import run_xgb
 
 counters = {"zeek": 0, "syslog": 0, "db": 0}
 
-zeek_window = deque(maxlen=1000)
+zeek_window = deque(maxlen=10000)
 
 def parse_zeek(data: dict) -> dict:
     """
@@ -38,9 +39,11 @@ def parsing_service_selector(raw: str):
     if "zeek" in tags:
         zeek_window.append(parse_zeek(data))
         counters["zeek"] += 1
-        print(f"\033[92mAll Good Zeek [{counters['zeek']}] - Window: [{len(zeek_window)}/1000]\033[00m")
-        if len(zeek_window) == 1000:
-            run_isolation_forest(zeek_window)
+        print(f"\033[92mAll Good Zeek [{counters['zeek']}] - Window: [{len(zeek_window)}/200]\033[00m")
+        if len(zeek_window) >= 200:
+            flagged = run_isolation_forest(zeek_window)
+            if flagged:
+                run_xgb(flagged)
     elif "beats_input_codec_plain_applied" in tags:
         parse_syslog(data)
         counters["syslog"] += 1
