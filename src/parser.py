@@ -1,6 +1,6 @@
 import json
 from collections import deque
-from src.db import dump_sqlite
+from src.db import dump_sqlite, store_event
 from src.model_if import run_isolation_forest
 from src.model_xgb import run_xgb
 
@@ -37,7 +37,9 @@ def parsing_service_selector(raw: str):
     tags = data.get("tags", [])
 
     if "zeek" in tags:
-        zeek_window.append(parse_zeek(data))
+        parsed = parse_zeek(data)
+        zeek_window.append(parsed)
+        store_event("zeek", parsed)
         counters["zeek"] += 1
         print(f"\033[92mAll Good Zeek [{counters['zeek']}] - Window: [{len(zeek_window)}/200]\033[00m")
         if len(zeek_window) >= 200:
