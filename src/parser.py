@@ -1,7 +1,11 @@
 import json
+from collections import deque
 from src.db import dump_sqlite
+from src.model_if import run_isolation_forest
 
 counters = {"zeek": 0, "syslog": 0, "db": 0}
+
+zeek_window = deque(maxlen=1000)
 
 def parse_zeek(data: dict) -> dict:
     """
@@ -32,9 +36,11 @@ def parsing_service_selector(raw: str):
     tags = data.get("tags", [])
 
     if "zeek" in tags:
-        parse_zeek(data)
+        zeek_window.append(parse_zeek(data))
         counters["zeek"] += 1
-        print(f"\033[92mAll Good Zeek [{counters['zeek']}]\033[00m")
+        print(f"\033[92mAll Good Zeek [{counters['zeek']}] - Window: [{len(zeek_window)}/1000]\033[00m")
+        if len(zeek_window) == 1000:
+            run_isolation_forest(zeek_window)
     elif "beats_input_codec_plain_applied" in tags:
         parse_syslog(data)
         counters["syslog"] += 1
