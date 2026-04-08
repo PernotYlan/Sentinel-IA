@@ -3,6 +3,7 @@ from collections import deque
 from src.db import dump_sqlite, store_event
 from src.model_if import run_isolation_forest
 from src.model_xgb import run_xgb
+from src.model_ae import run_ae
 
 counters = {"zeek": 0, "syslog": 0, "db": 0}
 
@@ -46,6 +47,7 @@ def parsing_service_selector(raw: str):
             flagged = run_isolation_forest(zeek_window)
             if flagged:
                 run_xgb(flagged)
+                run_ae(flagged)
     elif "beats_input_codec_plain_applied" in tags:
         parse_syslog(data)
         counters["syslog"] += 1
