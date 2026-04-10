@@ -1,156 +1,197 @@
-# 🛡️ SENTINEL AI
+# Sentinel-IA
 
-![Status](https://img.shields.io/badge/status-WIP%20%F0%9F%9A%A7-orange)
+![Status](https://img.shields.io/badge/status-PreProd-orange)
 ![License](https://img.shields.io/badge/license-Proprietary-red)
-![Phase](https://img.shields.io/badge/phase-Avant--Projet-blue)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
-![Kafka](https://img.shields.io/badge/Apache%20Kafka-streaming-231F20?logo=apacheKafka&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688?logo=fastapi&logoColor=white)
-![React](https://img.shields.io/badge/React-dashboard-61DAFB?logo=react&logoColor=black)
 ![Docker](https://img.shields.io/badge/Docker-containers-2496ED?logo=docker&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-ingestion-FF4438?logo=redis&logoColor=white)
+![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-F7931E?logo=scikitlearn&logoColor=white)
+![XGBoost](https://img.shields.io/badge/XGBoost-ML-189fdd)
+![TensorFlow](https://img.shields.io/badge/TensorFlow-Keras-FF6F00?logo=tensorflow&logoColor=white)
 
-> **Plateforme de détection réseau intelligente par IA — souveraine, accessible, pédagogique.**
-
-SENTINEL AI est une plateforme de détection d'intrusions réseau (NDR) alimentée par l'intelligence artificielle. Elle a été conçue pour répondre à un manque structurel du marché français : les PME, ETI et collectivités n'ont aujourd'hui accès à aucune solution de cybersécurité réseau souveraine, abordable et lisible. SENTINEL AI y répond.
-
----
-
-## 🚧 Statut du projet
-
-Ce dépôt est en cours de construction active. Nous sommes actuellement en **phase d'avant-projet (Mars 2026)**.
-
-| Phase | Statut |
-|---|---|
-| Avant-projet & faisabilité | ✅ Terminé |
-| Cadrage & architecture détaillée | 🔄 En cours |
-| Développement V1 | ⏳ Prévu — Juillet 2026 |
-| Livraison V1 | 🎯 Cible — Mars 2027 |
+> Plateforme de détection d'anomalies réseau par apprentissage automatique. Sentinel-IA consomme des logs Zeek et Filebeat via Redis, les analyse en temps réel à travers un pipeline de trois modèles ML, et persiste les résultats dans une base SQLite locale.
 
 ---
 
-## 🎯 Objectif
+## Objectif
 
 La plupart des solutions de détection réseau existantes sont soit trop complexes, soit réservées aux grandes entreprises (Darktrace, Vectra AI, Sophos NDR — souvent > 100 000 €/an), soit hébergées à l'étranger et soumises à des législations incompatibles avec le RGPD (CLOUD Act américain).
 
-SENTINEL AI vise à offrir :
+Sentinel-IA vise à offrir :
 
-- 🔍 Une **détection proactive** des intrusions, malwares et comportements anormaux en temps réel
-- 🧠 Un **moteur IA** entraîné sur des datasets de trafic réseau réels et diversifiés
-- 📊 Un **dashboard simplifié** lisible sans expertise en cybersécurité
-- 🇫🇷 Une solution **100 % souveraine**, hébergeable sur infrastructure française
-- 💶 Un modèle **SaaS accessible** aux PME (budget 8 000 – 25 000 €/an)
+- Une détection proactive des intrusions, malwares et comportements anormaux en temps réel
+- Un moteur IA entraîné sur le trafic réel du client, affiné toutes les deux semaines
+- Une solution 100 % souveraine, hébergeable sur infrastructure française
+- Un modèle SaaS accessible aux PME, ETI et collectivités (budget 8 000 – 25 000 €/an)
 
 ---
 
-## 🏗️ Architecture technique
+## Architecture
+
 ```
-Infrastructure Client
-        │
-        ▼
-Network Sensors (Suricata, Zeek, Packetbeat)
-        │
-        ▼
-Log & Telemetry Pipeline (Apache Kafka, Logstash, Filebeat)
-        │
-        ▼
-Feature Engineering (Python, pandas, Spark)
-        │
-        ▼
-ML Detection Layer (Isolation Forest, XGBoost, Autoencoder)
-        │
-        ▼
-Threat Correlation Engine (Elasticsearch, graph analysis)
-        │
-        ▼
-AI Security Analyst (LLM — Mistral / Llama)
-        │
-   ┌────┴────┐
-   ▼         ▼
-SOC Dashboard    SOAR — Réponse Automatisée
-(Grafana/Kibana)  (StackStorm, Cortex)
+Zeek / Filebeat
+      |
+      v
+   Redis (BLPOP)
+      |
+      v
+   parser.py  <-- routing par tags JSON
+    /       \
+zeek        syslog
+  |            |
+  v            v
+buffer.db   buffer.db
+(events)   (unknown_events)
+  |
+  v
+Isolation Forest  -->  XGBoost  -->  Autoencoder
 ```
 
-### Stack principale
-
-| Composant | Technologies |
-|---|---|
-| **Capteurs réseau** | Suricata, Zeek, Packetbeat |
-| **Pipeline de données** | Apache Kafka, Logstash, Filebeat |
-| **Feature engineering** | Python, pandas, numpy, Apache Spark |
-| **Modèles ML** | Isolation Forest, XGBoost, Autoencoder (PyTorch / scikit-learn) |
-| **Corrélation** | Elasticsearch, analyse de graphes |
-| **Analyste IA** | LLM (Mistral, Llama) |
-| **Dashboard** | React / Vue.js + FastAPI / Go |
-| **Orchestration** | Docker, microservices |
-| **SOAR** | StackStorm, Cortex + TheHive |
+Le pipeline ML est séquentiel : XGBoost et Autoencoder ne s'exécutent que sur les événements déjà flaggés par Isolation Forest, ce qui réduit drastiquement les faux positifs.
 
 ---
 
-## 🎓 Dimension pédagogique
+## Modèles ML
 
-SENTINEL AI est aussi un **projet pédagogique**. Une partie du développement est confiée à des étudiants de l'**École Limayrac** (Toulouse) — niveaux BTS, Bachelor, Mastère — via un concours organisé par **SYNJ**.
+### Isolation Forest
+- Modèle non supervisé, entraine sur le trafic client
+- Attend 30 000 événements Zeek avant le premier entrainement
+- Si un modèle existe sur disque (`train/if_model.pkl`), il est chargé immédiatement au démarrage sans attendre les 30k
+- Réentraine toutes les 2 semaines via cron
 
-- Les missions sont **rémunérées** sous forme de dotations (jusqu'à 150 € par mission)
-- Les étudiants travaillent sur de vrais livrables industriels, validés par Interface Numérique
-- C'est une **première expérience professionnelle concrète** en cybersécurité
+### XGBoost
+- Modèle supervisé, pré-entrainé sur NSL-KDD et CICIDS2017
+- Ne s'exécute que sur les événements flaggés par Isolation Forest
+- Modèle statique : `train/xgb_model.json`
 
-👉 Tu es étudiant à Limayrac ? [Consulte les missions ouvertes](#) *(lien à venir)*
+### Autoencoder
+- Réseau de neurones entraîné sur le trafic client (architecture 7→16→8→4→8→16→7)
+- Détecte les anomalies par reconstruction error vs seuil (mean + 2*std)
+- Réentraine toutes les 2 semaines via cron, une heure après IF
+- Vide la table `events` après chaque cycle d'entrainement
 
 ---
 
-## 🤝 Partenaires
+## Persistence et hotswap
 
-| Partenaire | Rôle |
-|---|---|
-| [**Interface Numérique**](https://www.maintenance-informatique-et-reseaux.com/) | Maître d'œuvre — Architecture, développement, intégration |
-| [**SYNJ**](https://synj.fr) | Organisation du concours étudiant — Coordination, briefs, jury |
-| [**École Limayrac**](https://www.limayrac.fr/) | Partenaire pédagogique — Communication et contributions étudiantes |
+Les modèles IF et AE sont sauvegardés sur disque après chaque entrainement. Un watcher `watchdog` surveille les fichiers `.pkl` et `.keras` et recharge les modèles à chaud sans redémarrer Sentinel.
+
+Les données d'entrainement s'accumulent dans `buffer.db` (SQLite). L'AE vide la table `events` après chaque cycle — IF et AE s'entrainent donc sur les mêmes données, sans doublon.
 
 ---
 
-## 📁 Structure du dépôt *(à venir)*
+## Structure du dépôt
+
 ```
-sentinel-ai/
-├── agents/          # Capteurs réseau légers (Linux / Windows)
-├── pipeline/        # Ingestion et normalisation des données
-├── ml/              # Modèles de détection IA
-├── api/             # Backend FastAPI / Go
-├── dashboard/       # Frontend React
-├── soar/            # Modules de réponse automatisée
-├── docs/            # Documentation technique et utilisateur
-└── datasets/        # Données d'entraînement (anonymisées)
+sentinel-ia/
+├── main.py               # Point d'entrée
+├── entrypoint.sh         # Setup cron + lancement
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+├── src/
+│   ├── env.py            # Lecture config Redis
+│   ├── redis.py          # Connexion + boucle BLPOP
+│   ├── parser.py         # Routing Zeek / syslog, fenetre glissante
+│   ├── db.py             # SQLite : init, store, dump, flush
+│   ├── features.py       # Extraction et encodage des features
+│   ├── model_if.py       # Isolation Forest : init, watchdog, scoring
+│   ├── model_xgb.py      # XGBoost : chargement, scoring
+│   └── model_ae.py       # Autoencoder : init, watchdog, scoring
+└── train/
+    ├── train_if.py        # Script entrainement IF (appelé par cron)
+    ├── train_ae.py        # Script entrainement AE (appelé par cron)
+    └── train_xgb.py       # Script entrainement XGBoost sur datasets publics
 ```
 
 ---
 
-## 🚀 Lancer le projet *(à venir)*
+## Lancer le projet
 
-> La documentation d'installation sera disponible à partir de la phase de développement (Juillet 2026).
+Prérequis : Docker, Docker Compose, accès à un Redis recevant des logs Zeek/Filebeat.
+
 ```bash
-# Cloner le dépôt
-git clone https://github.com/interface-numerique/sentinel-ai.git
-cd sentinel-ai
-
-# Lancer l'environnement de développement
-docker compose up -d
+git clone https://github.com/PernotYlan/Sentinel-IA.git
+cd Sentinel-IA
+chmod +x entrypoint.sh
+docker compose build
+docker compose run sentinel
 ```
+
+Au premier lancement, Sentinel demande interactivement l'hôte et le port Redis.
+La configuration est sauvegardée dans `.env` et réutilisée aux lancements suivants.
 
 ---
 
-## 📜 Licence
+## Crons
 
-Ce projet est **propriétaire** — développé et détenu par **Interface Numérique**.  
-Le code source n'est pas public. L'accès est réservé aux parties prenantes du projet.  
-Les contributions étudiantes font l'objet d'une cession de droits explicite.  
+| Modele | Frequence (PROD) | Heure |
+|--------|-----------------|-------|
+| Isolation Forest | toutes les 2 semaines | 2h00 |
+| Autoencoder | toutes les 2 semaines | 3h00 |
+
+Pour passer en mode DEV (entrainement toutes les 2 minutes), commenter les lignes PROD dans `entrypoint.sh` et décommenter les lignes DEV.
+
+---
+
+## Stack technique
+
+| Composant | Technologie |
+|-----------|------------|
+| Ingestion | Redis (BLPOP) |
+| Capteurs | Zeek, Filebeat |
+| ML | scikit-learn, XGBoost, TensorFlow/Keras |
+| Persistence | SQLite, pickle |
+| Hotswap | watchdog |
+| Conteneurisation | Docker, Docker Compose |
+| Cron | cron (dans le conteneur) |
+
+---
+
+## Dimension pédagogique
+
+Sentinel-IA est aussi un projet pédagogique. Une partie du développement est confiée à des étudiants de l'**École Limayrac** (Toulouse) — niveaux BTS, Bachelor, Mastère — via un concours organisé par **SYNJ**.
+
+- Les missions sont rémunérées sous forme de dotations (jusqu'à 150 € par mission)
+- Les étudiants travaillent sur de vrais livrables industriels, validés par Interface Numérique
+- C'est une première expérience professionnelle concrète en cybersécurité
+
+Tu es étudiant à Limayrac ? Consulte les missions ouvertes *(lien à venir)*
+
+---
+
+## Partenaires
+
+| Partenaire | Role |
+|---|---|
+| [Interface Numérique](https://www.maintenance-informatique-et-reseaux.com/) | Maitre d'oeuvre — Architecture, développement, intégration |
+| [SYNJ](https://synj.fr) | Organisation du concours étudiant — Coordination, briefs, jury |
+| [École Limayrac](https://www.limayrac.fr/) | Partenaire pédagogique — Communication et contributions étudiantes |
+
+---
+
+## Equipe
+
+| Nom | Role |
+|-----|------|
+| Ylan.P | Dev |
+| Thierry.B | Dev |
+
+---
+
+## Licence
+
+Projet propriétaire — développé par Interface Numérique.
+Le code source n'est pas public. L'accès est réservé aux parties prenantes du projet.
 Consultez le fichier [LICENSE](./LICENSE) pour plus d'informations.
 
 ---
 
-## 📬 Contact
+## Contact
 
-Pour toute question sur le projet : **contact@interface-numerique.net**  
+Pour toute question sur le projet : **contact@interface-numerique.net**
 Pour le concours étudiant : contacter **SYNJ** via l'École Limayrac.
 
 ---
 
-*SENTINEL AI — Interface Numérique × SYNJ × École Limayrac — Mars 2026*
+*Sentinel-IA — Interface Numérique x SYNJ x École Limayrac — 2026*
