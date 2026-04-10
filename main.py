@@ -4,6 +4,7 @@ from src.env import check_for_environment
 from src.redis import connect_redis, receiver_redis
 from src.db import init_db
 from src.model_ae import init_ae
+from src.model_if import init_if
 
 def main():
     """
@@ -13,6 +14,7 @@ def main():
     ## TODO: add a return to check_for_environment() to handle in case of error
     init_db()
     init_ae()
+    init_if()
     r = connect_redis()
     receiver_redis(r)
 
