@@ -1,8 +1,0 @@
-[book]
-title = "Documentation Officielle SentinelAI"
-authors = ["CrackedOnTiti"]
-language = "en"
-
-[output.html]
-default-theme = "coal"
-additional-js = ["mermaid.min.js", "mermaid-init.js"]
