@@ -2,9 +2,13 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y cron && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --timeout 300 -r requirements.txt
 
 COPY . .
 
-CMD ["python3", "main.py"]
+RUN chmod +x entrypoint.sh
+
+CMD ["./entrypoint.sh"]
