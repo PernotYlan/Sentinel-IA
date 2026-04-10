@@ -36,6 +36,8 @@ class _ModelReloader(FileSystemEventHandler):
     def on_modified(self, event):
         if event.src_path.endswith("ae_model.keras"):
             print(f"\033[94m[AE] Nouveau modele detecte, rechargement...\033[00m")
+            import time
+            time.sleep(1)
             _load_model()
 
 def init_ae():
