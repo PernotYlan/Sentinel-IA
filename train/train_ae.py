@@ -10,9 +10,12 @@ import json
 import numpy as np
 import pickle
 import os
+import sys
+sys.path.insert(0, "/app")
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow import keras
 from tensorflow.keras import layers
+from src.db import flush_events
 
 DB_PATH    = "buffer.db"
 MODEL_OUT  = os.path.join(os.path.dirname(__file__), "ae_model.keras")
@@ -113,6 +116,10 @@ def main():
 
     print(f"Modele sauvegarde: {MODEL_OUT}")
     print(f"Scaler sauvegarde: {SCALER_OUT}")
+
+    # Flush des evenements apres entrainement pour le prochain cycle
+    flush_events()
+    print("Table events videe pour le prochain cycle.")
 
 if __name__ == "__main__":
     main()
