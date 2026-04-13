@@ -5,9 +5,9 @@ Lance avec : python3 tui.py
 """
 
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, RichLog
+from textual.widgets import Header, Footer, Static, RichLog, ListView, ListItem, Label
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.containers import Horizontal
 from textual.reactive import reactive
 from textual import work
 from rich.text import Text
@@ -17,6 +17,8 @@ import random
 import time
 import psutil
 from datetime import datetime
+
+VERSION = "v1.1"
 
 
 class DetachPopup(ModalScreen):
@@ -51,6 +53,24 @@ class DetachPopup(ModalScreen):
         padding: 0 1;
     }
     """
+
+
+class AppHeader(Static):
+    """Barre d'information en haut de l'ecran"""
+
+    def render(self) -> Text:
+        now = datetime.now().strftime("%d/%m/%Y  %H:%M:%S")
+        t = Text()
+        t.append("Sentinel-IA\n", style="bold white")
+        t.append(f"{VERSION}\n\n", style="cyan")
+        t.append("Client   ", style="dim")
+        t.append("clientA\n", style="bold yellow")
+        t.append("Statut   ", style="dim")
+        t.append("en ligne\n", style="green bold")
+        t.append("Mode     ", style="dim")
+        t.append("surveillance\n\n", style="white")
+        t.append(now, style="dim")
+        return t
 
 
 class EnvStatus(Static):
@@ -191,19 +211,57 @@ class SentinelTUI(App):
         layout: vertical;
     }
 
+    AppHeader {
+        height: 14;
+        background: $panel;
+        padding: 1 2;
+        border: solid $panel;
+    }
+
+    #body {
+        height: 100%;
+    }
+
+    #sidebar {
+        width: 40%;
+        border-right: solid $panel;
+    }
+
+    ListView {
+        background: $surface;
+        align: center middle;
+        content-align: center middle;
+    }
+
+    ListItem {
+        padding: 1 2;
+        width: 100%;
+        content-align: center middle;
+    }
+
+    ListItem Label {
+        width: 100%;
+        text-align: center;
+    }
+
+    #main {
+        width: 1fr;
+        layout: vertical;
+    }
+
     #top_row {
-        height: 12;
+        height: 14;
     }
 
     EnvStatus {
-        width: 35;
+        width: 38;
         height: 100%;
         border: solid green;
         padding: 1 2;
     }
 
     Counters {
-        width: 28;
+        width: 26;
         height: 100%;
         border: solid blue;
         padding: 1 2;
@@ -230,25 +288,34 @@ class SentinelTUI(App):
     ]
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=True)
-        with Horizontal(id="top_row"):
-            yield EnvStatus()
-            yield Counters()
-            yield Travailleurs()
-        yield RichLog(id="log_panel", highlight=True, markup=True)
+        with Horizontal(id="body"):
+            with Vertical(id="sidebar"):
+                yield AppHeader()
+                yield ListView(
+                    ListItem(Label("Dashboard"),    id="item_dashboard"),
+                    ListItem(Label("Anomalies"),    id="item_anomalies"),
+                    ListItem(Label("Base donnees"), id="item_db"),
+                    ListItem(Label("Modeles ML"),   id="item_models"),
+                    ListItem(Label("Configuration"),id="item_config"),
+                )
+            with Vertical(id="main"):
+                with Horizontal(id="top_row"):
+                    yield EnvStatus()
+                    yield Counters()
+                    yield Travailleurs()
+                yield RichLog(id="log_panel", highlight=True, markup=True)
         yield Footer()
+
+    def on_mount(self):
+        self.set_interval(2, self.query_one(EnvStatus).refresh)
+        self.set_interval(1, self.query_one(AppHeader).refresh)
+        self._simulate()
 
     def action_menu(self):
         pass
 
     def action_detach(self):
         self.push_screen(DetachPopup())
-
-    def on_mount(self):
-        self.title = "Sentinel-IA"
-        self.sub_title = "Surveillance reseau en temps reel"
-        self.set_interval(2, self.query_one(EnvStatus).refresh)
-        self._simulate()
 
     @work(exclusive=False)
     async def _simulate(self):
