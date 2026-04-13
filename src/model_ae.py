@@ -1,6 +1,7 @@
 import numpy as np
 import pickle
 import os
+from src.logger import logger
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
@@ -25,9 +26,9 @@ def _load_model():
             data = pickle.load(f)
             scaler = data["scaler"]
             threshold = data["threshold"]
-        print(f"\033[92m[AE] Modele charge (seuil: {threshold:.6f})\033[00m")
+        logger.info(f"[AE] Modele charge (seuil: {threshold:.6f})")
     except Exception as e:
-        print(f"\033[91m[AE] Erreur chargement modele: {e}\033[00m")
+        logger.error(f"[AE] Erreur chargement modele: {e}")
 
 class _ModelReloader(FileSystemEventHandler):
     """
@@ -35,7 +36,7 @@ class _ModelReloader(FileSystemEventHandler):
     """
     def on_modified(self, event):
         if event.src_path.endswith("ae_model.keras"):
-            print(f"\033[94m[AE] Nouveau modele detecte, rechargement...\033[00m")
+            logger.info("[AE] Nouveau modele detecte, rechargement...")
             import time
             time.sleep(1)
             _load_model()
@@ -77,6 +78,6 @@ def run_ae(flagged_events: list):
     anomalies = int(np.sum(errors > threshold))
 
     if anomalies > 0:
-        print(f"\033[91m[AE] {anomalies} anomalie(s) confirmee(s) sur {len(flagged_events)} evenements suspects\033[00m")
+        logger.warning(f"[AE] {anomalies} anomalie(s) confirmee(s) sur {len(flagged_events)} evenements suspects")
     else:
-        print(f"\033[93m[AE] Faux positif IF - aucune anomalie confirmee\033[00m")
+        logger.info("[AE] Faux positif IF - aucune anomalie confirmee")

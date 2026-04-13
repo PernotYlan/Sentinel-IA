@@ -15,6 +15,8 @@ from collections import deque
 from src.env import check_for_environment
 from src.redis import connect_redis
 from src.db import init_db, store_event, dump_sqlite
+from src.logger import add_tui_handler, remove_tui_handler
+import logging
 import json
 import asyncio
 import time
@@ -195,6 +197,30 @@ class ConfigPopup(ModalScreen):
                 yield Label(var, markup=False)
                 yield Input(placeholder="nouvelle valeur...", id=f"input_{var}")
             yield Label("\n[dim]Echap pour fermer[/dim]", markup=True)
+
+
+class TUILogHandler(logging.Handler):
+    """Handler logging qui redirige les entrees vers le RichLog du TUI"""
+
+    def __init__(self, log_widget: RichLog):
+        super().__init__()
+        self._log = log_widget
+
+    def emit(self, record: logging.LogRecord):
+        msg = self.format(record)
+        level = record.levelname
+        if level == "WARNING":
+            color = "yellow"
+        elif level == "ERROR" or level == "CRITICAL":
+            color = "red"
+        elif level == "DEBUG":
+            color = "dim"
+        else:
+            color = "white"
+        try:
+            self._log.write(f"[{color}]{msg}[/{color}]")
+        except Exception:
+            pass
 
 
 class AppHeader(Static):
@@ -467,7 +493,13 @@ class SentinelTUI(App):
         self.set_interval(2, self.query_one(EnvStatus).refresh)
         self.set_interval(1, self.query_one(AppHeader).refresh)
         init_db()
+        self._tui_handler = TUILogHandler(self.query_one(RichLog))
+        add_tui_handler(self._tui_handler)
         self._redis_loop()
+
+    def on_unmount(self):
+        if hasattr(self, "_tui_handler"):
+            remove_tui_handler(self._tui_handler)
 
     def action_menu(self):
         pass
@@ -512,7 +544,7 @@ class SentinelTUI(App):
     def _simulate(self):
         """Simulation de donnees mockees — actif uniquement si Redis indisponible"""
         import random
-        log = self.query_one(RichLog)
+        from src.logger import logger
         counters = self.query_one(Counters)
         workers = self.query_one(Travailleurs)
         sources = ["zeek", "zeek", "zeek", "syslog", "db"]
@@ -521,27 +553,26 @@ class SentinelTUI(App):
         while header.simulating:
             time.sleep(0.3)
             source = random.choice(sources)
-            ts = datetime.now().strftime("%H:%M:%S")
 
             if source == "zeek":
                 self.call_from_thread(counters.record, "zeek")
                 self.call_from_thread(workers.__setattr__, "w1_queue", max(0, workers.w1_queue + random.randint(-1, 2)))
-                self.call_from_thread(log.write, f"[green]{ts}[/green]  [bold]ZEEK[/bold]    192.168.1.{random.randint(1,254)} → 10.0.0.{random.randint(1,10)}  port {random.randint(1024,65535)}")
+                logger.info(f"Zeek    192.168.1.{random.randint(1,254)} → 10.0.0.{random.randint(1,10)}  port {random.randint(1024,65535)}")
                 if random.random() < 0.05:
                     self.call_from_thread(workers.__setattr__, "anomalies", workers.anomalies + 1)
-                    self.call_from_thread(log.write, f"[red]{ts}[/red]  [bold red]ANOMALIE[/bold red] IF → XGB → AE  src=192.168.1.{random.randint(1,254)}")
+                    logger.warning(f"ANOMALIE IF → XGB → AE  src=192.168.1.{random.randint(1,254)}")
             elif source == "syslog":
                 self.call_from_thread(counters.record, "syslog")
-                self.call_from_thread(log.write, f"[blue]{ts}[/blue]  [bold]SYSLOG[/bold]  auth: session opened for user root")
+                logger.info("Syslog  auth: session opened for user root")
             else:
                 self.call_from_thread(counters.record, "db")
-                self.call_from_thread(log.write, f"[yellow]{ts}[/yellow]  [bold]AUTRE[/bold]   tags inconnus, dumpe dans SQLite")
+                logger.info("Autre   tags inconnus, dumpe dans SQLite")
 
     @work(thread=True)
     def _redis_loop(self):
         """Boucle Redis BLPOP dans un thread separe — met a jour le TUI via call_from_thread"""
+        from src.logger import logger
         r = connect_redis()
-        log = self.query_one(RichLog)
         counters = self.query_one(Counters)
 
         while True:
@@ -549,12 +580,11 @@ class SentinelTUI(App):
             if not result:
                 continue
             _, raw = result
-            ts = datetime.now().strftime("%H:%M:%S")
 
             try:
                 data = json.loads(raw)
             except Exception:
-                self.call_from_thread(log.write, f"[red]{ts}[/red]  [bold]ERREUR[/bold]  JSON invalide")
+                logger.error("JSON invalide recu depuis Redis")
                 continue
 
             tags = data.get("tags", [])
@@ -577,28 +607,17 @@ class SentinelTUI(App):
                 }
                 store_event("zeek", parsed)
                 self.call_from_thread(counters.record, "zeek")
-                self.call_from_thread(
-                    log.write,
-                    f"[green]{ts}[/green]  [bold]ZEEK[/bold]    "
-                    f"{parsed['src_ip']} → {parsed['dst_ip']}  "
-                    f"port {parsed['dst_port']}"
-                )
+                logger.info(f"Zeek    {parsed['src_ip']} → {parsed['dst_ip']}  port {parsed['dst_port']}")
 
             elif "beats_input_codec_plain_applied" in tags:
                 dump_sqlite(data)
                 self.call_from_thread(counters.record, "syslog")
-                self.call_from_thread(
-                    log.write,
-                    f"[blue]{ts}[/blue]  [bold]SYSLOG[/bold]  {data.get('message', '')[:60]}"
-                )
+                logger.info(f"Syslog  {data.get('message', '')[:60]}")
 
             else:
                 dump_sqlite(data)
                 self.call_from_thread(counters.record, "db")
-                self.call_from_thread(
-                    log.write,
-                    f"[yellow]{ts}[/yellow]  [bold]AUTRE[/bold]   tags: {tags}"
-                )
+                logger.debug(f"Autre   tags: {tags}")
 
 
 if __name__ == "__main__":

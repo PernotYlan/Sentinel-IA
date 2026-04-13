@@ -1,5 +1,6 @@
 from xgboost import XGBClassifier
 from src.features import extract_xgb
+from src.logger import logger
 import numpy as np
 import os
 
@@ -18,6 +19,6 @@ def run_xgb(flagged_events: list):
     scores = model.predict(X)
     confirmed = int(np.sum(scores))
     if confirmed > 0:
-        print(f"\033[91m[XGB] {confirmed} attaque(s) confirmee(s) sur {len(flagged_events)} evenements suspects\033[00m")
+        logger.warning(f"[XGB] {confirmed} attaque(s) confirmee(s) sur {len(flagged_events)} evenements suspects")
     else:
-        print(f"\033[93m[XGB] Faux positif IF - aucune attaque confirmee\033[00m")
+        logger.info("[XGB] Faux positif IF - aucune attaque confirmee")

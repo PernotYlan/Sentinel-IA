@@ -2,6 +2,7 @@ import redis
 import time
 from dotenv import load_dotenv
 from src.parser import parsing_service_selector
+from src.logger import logger
 import os
 
 MAX_RETRIES = 10
@@ -25,14 +26,14 @@ def connect_redis() -> redis.Redis:
                 decode_responses=True
             )
             r.ping()
-            print("\033[92mConnexion Redis OK\033[00m")
+            logger.info("Connexion Redis OK")
             return r
         except Exception as e:
             attempt += 1
             delay = min(RETRY_BASE ** attempt, RETRY_MAX)
-            print(f"\033[91mErreur connexion Redis: {e} — nouvelle tentative dans {delay}s ({attempt}/{MAX_RETRIES})\033[00m")
+            logger.warning(f"Erreur connexion Redis: {e} — nouvelle tentative dans {delay}s ({attempt}/{MAX_RETRIES})")
             if attempt >= MAX_RETRIES:
-                print("\033[91mNombre maximum de tentatives atteint, abandon.\033[00m")
+                logger.error("Nombre maximum de tentatives atteint, abandon.")
                 exit(1)
             time.sleep(delay)
 
@@ -49,8 +50,8 @@ def receiver_redis(r: redis.Redis):
             _, raw = result
             parsing_service_selector(raw)
         except redis.exceptions.ConnectionError as e:
-            print(f"\033[91mConnexion Redis perdue: {e} — reconnexion...\033[00m")
+            logger.error(f"Connexion Redis perdue: {e} — reconnexion...")
             r = connect_redis()
         except Exception as e:
-            print(f"\033[91mErreur inattendue: {e}\033[00m")
+            logger.error(f"Erreur inattendue: {e}")
             time.sleep(2)
