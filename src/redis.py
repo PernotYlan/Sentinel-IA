@@ -8,6 +8,7 @@ MAX_RETRIES = 10
 RETRY_BASE  = 2  # secondes, exponentiel: 2, 4, 8, 16...
 RETRY_MAX   = 60 # plafond en secondes
 
+# // TODO: Oublie pas de tester la logique de reconnection pas eut la possibilite avec le test 2 sem...
 def connect_redis() -> redis.Redis:
     """
     Cree un HandShake entre Sentinel et Redis
