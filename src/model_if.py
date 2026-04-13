@@ -2,6 +2,7 @@ import pickle
 import os
 from sklearn.ensemble import IsolationForest
 from src.features import extract_if
+from src.logger import logger
 from collections import deque
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -28,9 +29,9 @@ def _load_model():
             model = pickle.load(f)
         trained          = True
         loaded_from_disk = True
-        print(f"\033[92m[IF] Modele charge depuis le disque\033[00m")
+        logger.info("[IF] Modele charge depuis le disque")
     except Exception as e:
-        print(f"\033[91m[IF] Erreur chargement modele: {e}\033[00m")
+        logger.error(f"[IF] Erreur chargement modele: {e}")
 
 class _ModelReloader(FileSystemEventHandler):
     """
@@ -38,7 +39,7 @@ class _ModelReloader(FileSystemEventHandler):
     """
     def on_modified(self, event):
         if event.src_path.endswith("if_model.pkl"):
-            print(f"\033[94m[IF] Nouveau modele detecte, rechargement...\033[00m")
+            logger.info("[IF] Nouveau modele detecte, rechargement...")
             import time
             time.sleep(1)
             _load_model()
@@ -69,21 +70,21 @@ def run_isolation_forest(window: deque):
 
     if not trained:
         if len(window) < TRAIN_THRESHOLD:
-            print(f"\033[90m[IF] Collecte de donnees... [{len(window)}/{TRAIN_THRESHOLD}]\033[00m")
+            logger.debug(f"[IF] Collecte de donnees... [{len(window)}/{TRAIN_THRESHOLD}]")
             return None
         model.fit(features)
         trained = True
         with open(MODEL_PATH, "wb") as f:
             pickle.dump(model, f)
-        print(f"\033[92m[IF] Modele entraine et sauvegarde sur {TRAIN_THRESHOLD} evenements\033[00m")
+        logger.info(f"[IF] Modele entraine et sauvegarde sur {TRAIN_THRESHOLD} evenements")
         return None
 
     scores = model.predict(features)
     anomaly_indices = [i for i, s in enumerate(scores) if s == -1]
 
     if anomaly_indices:
-        print(f"\033[91m[IF] {len(anomaly_indices)} anomalie(s) detectee(s) sur 10 evenements\033[00m")
+        logger.warning(f"[IF] {len(anomaly_indices)} anomalie(s) detectee(s) sur 10 evenements")
         return [list(window)[-10:][i] for i in anomaly_indices]
     else:
-        print(f"\033[92m[IF] Normal\033[00m")
+        logger.debug("[IF] Normal")
         return None

@@ -1,6 +1,7 @@
 import json
 from collections import deque
 from src.db import dump_sqlite, store_event
+from src.logger import logger
 # from src.model_if import run_isolation_forest
 # import src.model_if as _model_if
 # from src.model_xgb import run_xgb
@@ -43,7 +44,7 @@ def parsing_service_selector(raw: str):
         zeek_window.append(parsed)
         store_event("zeek", parsed)
         counters["zeek"] += 1
-        print(f"\033[92mAll Good Zeek [{counters['zeek']}] - Window: [{len(zeek_window)}/30000]\033[00m")
+        logger.info(f"Zeek [{counters['zeek']}] - Window: [{len(zeek_window)}/30000]")
         # if _model_if.loaded_from_disk or len(zeek_window) >= 30000:
         #     flagged = run_isolation_forest(zeek_window)
         #     if flagged:
@@ -52,9 +53,9 @@ def parsing_service_selector(raw: str):
     elif "beats_input_codec_plain_applied" in tags:
         parse_syslog(data)
         counters["syslog"] += 1
-        print(f"\033[94mAll Good Syslog [{counters['syslog']}]\033[00m")
+        logger.info(f"Syslog [{counters['syslog']}]")
     else:
-        print(f"TAGS: {tags}")
+        logger.debug(f"Tags inconnus: {tags}")
         dump_sqlite(data)
         counters["db"] += 1
-        print(f"\033[93mAll Good DB [{counters['db']}]\033[00m")
+        logger.info(f"DB [{counters['db']}]")
