@@ -5,7 +5,7 @@ Lance avec : python3 tui.py
 """
 
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, RichLog, ListView, ListItem, Label
+from textual.widgets import Header, Footer, Static, RichLog, ListView, ListItem, Label, Input, DataTable
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.reactive import reactive
@@ -53,6 +53,144 @@ class DetachPopup(ModalScreen):
         padding: 0 1;
     }
     """
+
+
+class _MLContent(Static):
+    """Contenu du popup ML rendu via Rich Text"""
+
+    def render(self) -> Text:
+        t = Text()
+        t.append("Statut des modeles ML\n", style="bold magenta")
+        t.append("Montre le statut de chaque modele, leur derniere date d'entrainement\n", style="dim")
+        t.append("et leur configuration (ex: contamination 0.05 sur 1.0)\n\n", style="dim")
+
+        t.append("Isolation Forest\n", style="bold green")
+        t.append("  Statut        ", style="dim")
+        t.append("charge\n", style="green")  # TODO: lire depuis model_if
+        t.append("  Dernier entr. ", style="dim")
+        t.append("--/--/----\n", style="white")
+        t.append("  contamination ", style="dim")
+        t.append("0.05 / 1.0\n\n", style="cyan")
+
+        t.append("XGBoost\n", style="bold yellow")
+        t.append("  Statut        ", style="dim")
+        t.append("pre-entraine\n", style="yellow")
+        t.append("  Dataset       ", style="dim")
+        t.append("NSL-KDD + CICIDS2017\n\n", style="white")
+
+        t.append("Autoencoder\n", style="bold blue")
+        t.append("  Statut        ", style="dim")
+        t.append("non entraine\n", style="red")  # TODO: lire depuis model_ae
+        t.append("  Dernier entr. ", style="dim")
+        t.append("--/--/----\n", style="white")
+        t.append("  Seuil         ", style="dim")
+        t.append("--\n", style="cyan")
+        return t
+
+
+class AnomaliesPopup(ModalScreen):
+    """Popup listant les anomalies detectees dans SQLite"""
+
+    BINDINGS = [("escape", "dismiss", "Fermer")]
+
+    DEFAULT_CSS = """
+    AnomaliesPopup { align: center middle; }
+    #anomalies_box {
+        width: 80; height: 24;
+        border: solid red;
+        background: $surface;
+        padding: 1 2;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="anomalies_box"):
+            yield Label("[bold red]Anomalies detectees[/bold red]", markup=True)
+            yield Label("[dim]Montre les anomalies confirmees retrouvees dans buffer.db[/dim]\n", markup=True)
+            table = DataTable()
+            table.add_columns("Timestamp", "Source IP", "Modele", "Score")
+            # TODO: remplacer par requete SQLite reelle
+            table.add_rows([("--:--:--", "-", "-", "-")])
+            yield table
+            yield Label("\n[dim]Echap pour fermer[/dim]", markup=True)
+
+
+class DBPopup(ModalScreen):
+    """Popup de navigation libre dans buffer.db"""
+
+    BINDINGS = [("escape", "dismiss", "Fermer")]
+
+    DEFAULT_CSS = """
+    DBPopup { align: center middle; }
+    #db_box {
+        width: 80; height: 24;
+        border: solid blue;
+        background: $surface;
+        padding: 1 2;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="db_box"):
+            yield Label("[bold blue]Base de donnees — buffer.db[/bold blue]", markup=True)
+            yield Label("[dim]Browse la base de donnees librement en direct[/dim]\n", markup=True)
+            table = DataTable()
+            table.add_columns("ID", "Source", "Timestamp", "Apercu")
+            # TODO: remplacer par requete SQLite reelle
+            table.add_rows([("-", "-", "-", "-")])
+            yield table
+            yield Label("\n[dim]Echap pour fermer[/dim]", markup=True)
+
+
+class MLPopup(ModalScreen):
+    """Popup de statut des modeles ML"""
+
+    BINDINGS = [("escape", "dismiss", "Fermer")]
+
+    DEFAULT_CSS = """
+    MLPopup { align: center middle; }
+    #ml_box {
+        width: 64; height: 24;
+        border: solid magenta;
+        background: $surface;
+        padding: 1 2;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="ml_box"):
+            yield _MLContent()
+            yield Label("[dim]Echap pour fermer[/dim]", markup=True)
+
+
+class ConfigPopup(ModalScreen):
+    """Popup de modification des variables d'environnement"""
+
+    BINDINGS = [("escape", "dismiss", "Fermer")]
+
+    DEFAULT_CSS = """
+    ConfigPopup { align: center middle; }
+    #config_box {
+        width: 60; height: 24;
+        border: solid yellow;
+        background: $surface;
+        padding: 1 2;
+    }
+    Input {
+        margin: 0 0 1 0;
+    }
+    """
+
+    ENV_VARS = ["REDIS_HOST", "REDIS_PORT", "CONTAMINATION", "TRAIN_THRESHOLD"]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="config_box"):
+            yield Label("[bold yellow]Configuration — .env[/bold yellow]", markup=True)
+            yield Label("[dim]Modifie les variables d'environnement sans afficher leurs valeurs actuelles.\nLaisse vide pour conserver la valeur existante.[/dim]\n", markup=True)
+            for var in self.ENV_VARS:
+                yield Label(var, markup=False)
+                yield Input(placeholder="nouvelle valeur...", id=f"input_{var}")
+            yield Label("\n[dim]Echap pour fermer[/dim]", markup=True)
 
 
 class AppHeader(Static):
@@ -297,6 +435,7 @@ class SentinelTUI(App):
                     ListItem(Label("Base donnees"), id="item_db"),
                     ListItem(Label("Modeles ML"),   id="item_models"),
                     ListItem(Label("Configuration"),id="item_config"),
+                    ListItem(Label("Quitter"),      id="item_quit"),
                 )
             with Vertical(id="main"):
                 with Horizontal(id="top_row"):
@@ -313,6 +452,19 @@ class SentinelTUI(App):
 
     def action_menu(self):
         pass
+
+    def on_list_view_selected(self, event: ListView.Selected):
+        item_id = event.item.id
+        if item_id == "item_anomalies":
+            self.push_screen(AnomaliesPopup())
+        elif item_id == "item_db":
+            self.push_screen(DBPopup())
+        elif item_id == "item_models":
+            self.push_screen(MLPopup())
+        elif item_id == "item_config":
+            self.push_screen(ConfigPopup())
+        elif item_id == "item_quit":
+            self.exit()
 
     def action_detach(self):
         self.push_screen(DetachPopup())
