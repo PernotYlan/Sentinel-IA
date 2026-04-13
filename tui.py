@@ -12,10 +12,14 @@ from textual.reactive import reactive
 from textual import work
 from rich.text import Text
 from collections import deque
+from src.env import check_for_environment
+from src.redis import connect_redis
+from src.db import init_db, store_event, dump_sqlite
+import json
 import asyncio
-import random
 import time
 import psutil
+import os
 from datetime import datetime
 
 VERSION = "v1.1"
@@ -196,6 +200,8 @@ class ConfigPopup(ModalScreen):
 class AppHeader(Static):
     """Barre d'information en haut de l'ecran"""
 
+    simulating: reactive[bool] = reactive(False)
+
     def render(self) -> Text:
         now = datetime.now().strftime("%d/%m/%Y  %H:%M:%S")
         t = Text()
@@ -206,7 +212,11 @@ class AppHeader(Static):
         t.append("Statut   ", style="dim")
         t.append("en ligne\n", style="green bold")
         t.append("Mode     ", style="dim")
-        t.append("surveillance\n\n", style="white")
+        if self.simulating:
+            t.append("SIMULATION\n", style="bold red on yellow")
+        else:
+            t.append("surveillance\n", style="white")
+        t.append("\n")
         t.append(now, style="dim")
         return t
 
@@ -417,6 +427,13 @@ class SentinelTUI(App):
         padding: 0 1;
         height: 1fr;
     }
+
+    /* Flash rouge en mode simulation */
+    .sim-flash EnvStatus      { border: solid red; }
+    .sim-flash Counters       { border: solid red; }
+    .sim-flash Travailleurs   { border: solid red; }
+    .sim-flash #log_panel     { border: solid red; }
+    .sim-flash #sidebar       { border-right: solid red; }
     """
 
     BINDINGS = [
@@ -435,6 +452,7 @@ class SentinelTUI(App):
                     ListItem(Label("Base donnees"), id="item_db"),
                     ListItem(Label("Modeles ML"),   id="item_models"),
                     ListItem(Label("Configuration"),id="item_config"),
+                    ListItem(Label("Simuler"),      id="item_simulate"),
                     ListItem(Label("Quitter"),      id="item_quit"),
                 )
             with Vertical(id="main"):
@@ -448,7 +466,8 @@ class SentinelTUI(App):
     def on_mount(self):
         self.set_interval(2, self.query_one(EnvStatus).refresh)
         self.set_interval(1, self.query_one(AppHeader).refresh)
-        self._simulate()
+        init_db()
+        self._redis_loop()
 
     def action_menu(self):
         pass
@@ -463,44 +482,125 @@ class SentinelTUI(App):
             self.push_screen(MLPopup())
         elif item_id == "item_config":
             self.push_screen(ConfigPopup())
+        elif item_id == "item_simulate":
+            self._toggle_simulate()
         elif item_id == "item_quit":
             self.exit()
 
     def action_detach(self):
         self.push_screen(DetachPopup())
 
-    @work(exclusive=False)
-    async def _simulate(self):
-        """Simule des evenements entrants pour tester le rendu"""
+    def _toggle_simulate(self):
+        header = self.query_one(AppHeader)
+        header.simulating = not header.simulating
+        if header.simulating:
+            self._flash_timer = self.set_interval(0.5, self._flash_borders)
+            self._simulate()
+        else:
+            if hasattr(self, "_flash_timer"):
+                self._flash_timer.stop()
+            self.query_one("#body").remove_class("sim-flash")
+
+    def _flash_borders(self):
+        body = self.query_one("#body")
+        if "sim-flash" in body.classes:
+            body.remove_class("sim-flash")
+        else:
+            body.add_class("sim-flash")
+
+    @work(exclusive=True, thread=True)
+    def _simulate(self):
+        """Simulation de donnees mockees — actif uniquement si Redis indisponible"""
+        import random
         log = self.query_one(RichLog)
         counters = self.query_one(Counters)
         workers = self.query_one(Travailleurs)
         sources = ["zeek", "zeek", "zeek", "syslog", "db"]
+        header = self.query_one(AppHeader)
 
-        while True:
-            await asyncio.sleep(0.3)
+        while header.simulating:
+            time.sleep(0.3)
             source = random.choice(sources)
             ts = datetime.now().strftime("%H:%M:%S")
 
             if source == "zeek":
-                counters.record("zeek")
-                workers.w1_queue = max(0, workers.w1_queue + random.randint(-1, 2))
-                log.write(f"[green]{ts}[/green]  [bold]ZEEK[/bold]    192.168.1.{random.randint(1,254)} → 10.0.0.{random.randint(1,10)}  port {random.randint(1024,65535)}")
+                self.call_from_thread(counters.record, "zeek")
+                self.call_from_thread(workers.__setattr__, "w1_queue", max(0, workers.w1_queue + random.randint(-1, 2)))
+                self.call_from_thread(log.write, f"[green]{ts}[/green]  [bold]ZEEK[/bold]    192.168.1.{random.randint(1,254)} → 10.0.0.{random.randint(1,10)}  port {random.randint(1024,65535)}")
                 if random.random() < 0.05:
-                    workers.anomalies += 1
-                    workers.w2_queue = max(0, workers.w2_queue + 1)
-                    workers.w3_queue = max(0, workers.w3_queue + 1)
-                    log.write(f"[red]{ts}[/red]  [bold red]ANOMALIE[/bold red] IF → XGB → AE  src=192.168.1.{random.randint(1,254)}")
+                    self.call_from_thread(workers.__setattr__, "anomalies", workers.anomalies + 1)
+                    self.call_from_thread(log.write, f"[red]{ts}[/red]  [bold red]ANOMALIE[/bold red] IF → XGB → AE  src=192.168.1.{random.randint(1,254)}")
             elif source == "syslog":
-                counters.record("syslog")
-                log.write(f"[blue]{ts}[/blue]  [bold]SYSLOG[/bold]  auth: session opened for user root")
+                self.call_from_thread(counters.record, "syslog")
+                self.call_from_thread(log.write, f"[blue]{ts}[/blue]  [bold]SYSLOG[/bold]  auth: session opened for user root")
             else:
-                counters.record("db")
-                log.write(f"[yellow]{ts}[/yellow]  [bold]AUTRE[/bold]   tags inconnus, dumpe dans SQLite")
+                self.call_from_thread(counters.record, "db")
+                self.call_from_thread(log.write, f"[yellow]{ts}[/yellow]  [bold]AUTRE[/bold]   tags inconnus, dumpe dans SQLite")
 
-            workers.w2_queue = max(0, workers.w2_queue - 1)
-            workers.w3_queue = max(0, workers.w3_queue - 1)
+    @work(thread=True)
+    def _redis_loop(self):
+        """Boucle Redis BLPOP dans un thread separe — met a jour le TUI via call_from_thread"""
+        r = connect_redis()
+        log = self.query_one(RichLog)
+        counters = self.query_one(Counters)
+
+        while True:
+            result = r.blpop(os.getenv("REDIS_KEY"), timeout=0)
+            if not result:
+                continue
+            _, raw = result
+            ts = datetime.now().strftime("%H:%M:%S")
+
+            try:
+                data = json.loads(raw)
+            except Exception:
+                self.call_from_thread(log.write, f"[red]{ts}[/red]  [bold]ERREUR[/bold]  JSON invalide")
+                continue
+
+            tags = data.get("tags", [])
+
+            if "zeek" in tags:
+                parsed = {
+                    "src_ip":    data.get("id.orig_h"),
+                    "dst_ip":    data.get("id.resp_h"),
+                    "src_port":  data.get("id.orig_p"),
+                    "dst_port":  data.get("id.resp_p"),
+                    "proto":     data.get("proto"),
+                    "service":   data.get("service"),
+                    "duration":  data.get("duration"),
+                    "orig_bytes":data.get("orig_bytes"),
+                    "resp_bytes":data.get("resp_bytes"),
+                    "conn_state":data.get("conn_state"),
+                    "orig_pkts": data.get("orig_pkts"),
+                    "resp_pkts": data.get("resp_pkts"),
+                    "timestamp": data.get("@timestamp"),
+                }
+                store_event("zeek", parsed)
+                self.call_from_thread(counters.record, "zeek")
+                self.call_from_thread(
+                    log.write,
+                    f"[green]{ts}[/green]  [bold]ZEEK[/bold]    "
+                    f"{parsed['src_ip']} → {parsed['dst_ip']}  "
+                    f"port {parsed['dst_port']}"
+                )
+
+            elif "beats_input_codec_plain_applied" in tags:
+                dump_sqlite(data)
+                self.call_from_thread(counters.record, "syslog")
+                self.call_from_thread(
+                    log.write,
+                    f"[blue]{ts}[/blue]  [bold]SYSLOG[/bold]  {data.get('message', '')[:60]}"
+                )
+
+            else:
+                dump_sqlite(data)
+                self.call_from_thread(counters.record, "db")
+                self.call_from_thread(
+                    log.write,
+                    f"[yellow]{ts}[/yellow]  [bold]AUTRE[/bold]   tags: {tags}"
+                )
 
 
 if __name__ == "__main__":
+    check_for_environment()
     SentinelTUI().run()
