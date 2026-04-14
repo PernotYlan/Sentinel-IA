@@ -14,6 +14,7 @@ import os
 import sys
 sys.path.insert(0, "/app")
 from sklearn.ensemble import IsolationForest
+from src.db import flush_events
 
 MODEL_OUT = os.path.join(os.path.dirname(__file__), "if_model.pkl")
 DB_PATH   = "buffer.db"
@@ -59,6 +60,9 @@ def main():
         pickle.dump(model, f)
 
     print(f"Modele sauvegarde: {MODEL_OUT}")
+
+    flush_events()
+    print("Table events videe pour le prochain cycle.")
 
 if __name__ == "__main__":
     main()
