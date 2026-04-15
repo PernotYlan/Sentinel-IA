@@ -1,7 +1,7 @@
 import redis
 import time
 from dotenv import load_dotenv
-from src.parser import parsing_service_selector
+from src.worker import get_queue
 import os
 
 MAX_RETRIES = 10
@@ -47,7 +47,7 @@ def receiver_redis(r: redis.Redis):
         try:
             result = r.blpop(os.getenv("REDIS_KEY"), timeout=0)
             _, raw = result
-            parsing_service_selector(raw)
+            get_queue().put(raw)
         except redis.exceptions.ConnectionError as e:
             print(f"\033[91mConnexion Redis perdue: {e} — reconnexion...\033[00m")
             r = connect_redis()
