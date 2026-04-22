@@ -47,7 +47,7 @@ def parsing_service_selector(raw: str):
         store_event("zeek", parsed)
         counters["zeek"] += 1
         logger.info(f"Zeek [{counters['zeek']}] - Window: [{len(zeek_window)}/30000]")
-        # if _model_if.loaded_from_disk or len(zeek_window) >= 30000:
+        # if _model_if.loaded_from_disk or len(zeek_window) >= _model_if.TRAIN_THRESHOLD:
         #     flagged = run_isolation_forest(zeek_window)
         #     if flagged:
         #         run_xgb(flagged)
