@@ -3,6 +3,10 @@
 Test du pipeline threadé avec données mock
 Lance 3 workers + 1 producteur mock pendant 10 secondes
 """
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
 import time
 from src.db import init_db
 from src.worker import start_workers, stop_workers
