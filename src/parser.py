@@ -13,7 +13,8 @@ zeek_window = deque(maxlen=30000)
 
 def parse_zeek(data: dict) -> dict:
     """
-    fills a dic FRANCAIS OUBLIE PAS"""
+    Extrait les champs pertinents d'un evenement Zeek brut vers un dictionnaire normalise
+    """
     return {
         "src_ip": data.get("id.orig_h"),
         "dst_ip": data.get("id.resp_h"),
@@ -35,7 +36,8 @@ def parse_syslog(data: dict):
 
 def parsing_service_selector(raw: str):
     """
-    ecrire qqch"""
+    Route un evenement brut vers le bon parser selon les tags Filebeat/Zeek
+    """
     data = json.loads(raw)
     tags = data.get("tags", [])
 
