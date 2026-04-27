@@ -13,8 +13,11 @@ import pickle
 import os
 import sys
 sys.path.insert(0, "/app")
+from dotenv import load_dotenv
 from sklearn.ensemble import IsolationForest
 from src.db import flush_events
+
+load_dotenv(".env")
 
 MODEL_OUT = os.path.join(os.path.dirname(__file__), "if_model.pkl")
 DB_PATH   = "buffer.db"
@@ -53,7 +56,7 @@ def main():
     X = load_events()
 
     print("\nEntrainement Isolation Forest...")
-    model = IsolationForest(contamination=0.05, random_state=42)
+    model = IsolationForest(contamination=float(os.getenv("IF_CONTAMINATION", "0.01")), random_state=42)
     model.fit(X)
 
     with open(MODEL_OUT, "wb") as f:

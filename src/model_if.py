@@ -1,5 +1,6 @@
 import pickle
 import os
+from dotenv import load_dotenv
 from sklearn.ensemble import IsolationForest
 from src.features import extract_if
 from src.logger import logger
@@ -7,15 +8,17 @@ from collections import deque
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
+load_dotenv(".env")
+
 TRAIN_THRESHOLD = 30000
 # //TODO: determine the TRAIN_THRESHOLD -> maybe add to .env and param at start?
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "../train/if_model.pkl")
 
-model            = IsolationForest(contamination=0.01, random_state=42)
+_contamination   = float(os.getenv("IF_CONTAMINATION", "0.01"))
+model            = IsolationForest(contamination=_contamination, random_state=42)
 trained          = False
 loaded_from_disk = False
-# //TODO: determine the contamination lvl, this should be determined by SOC...
 
 def _load_model():
     """
