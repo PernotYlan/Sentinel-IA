@@ -14,7 +14,7 @@ from rich.text import Text
 from collections import deque
 from src.env import check_for_environment
 from src.redis import connect_redis
-from src.db import init_db, store_event, dump_sqlite
+from src.db import init_db, store_event, dump_sqlite, get_anomalies, get_events
 from src.logger import add_tui_handler, remove_tui_handler
 import logging
 import json
@@ -65,18 +65,31 @@ class _MLContent(Static):
     """Contenu du popup ML rendu via Rich Text"""
 
     def render(self) -> Text:
+        import src.model_if as _model_if
+        import src.model_ae as _model_ae
+        from datetime import datetime as _dt
+
+        def _mtime(path: str) -> str:
+            return _dt.fromtimestamp(os.path.getmtime(path)).strftime("%d/%m/%Y") if os.path.exists(path) else "--/--/----"
+
+        if_status = "charge" if _model_if.loaded_from_disk else ("entraine" if _model_if.trained else "non entraine")
+        if_color  = "green" if (_model_if.loaded_from_disk or _model_if.trained) else "red"
+
+        ae_status = "charge" if _model_ae.model is not None else "non entraine"
+        ae_color  = "green" if _model_ae.model is not None else "red"
+        ae_threshold = f"{_model_ae.threshold:.6f}" if _model_ae.threshold is not None else "--"
+
         t = Text()
         t.append("Statut des modeles ML\n", style="bold magenta")
-        t.append("Montre le statut de chaque modele, leur derniere date d'entrainement\n", style="dim")
-        t.append("et leur configuration (ex: contamination 0.05 sur 1.0)\n\n", style="dim")
+        t.append("Statut, derniere date d'entrainement et configuration de chaque modele\n\n", style="dim")
 
         t.append("Isolation Forest\n", style="bold green")
         t.append("  Statut        ", style="dim")
-        t.append("charge\n", style="green")  # TODO: lire depuis model_if
+        t.append(f"{if_status}\n", style=if_color)
         t.append("  Dernier entr. ", style="dim")
-        t.append("--/--/----\n", style="white")
+        t.append(f"{_mtime(_model_if.MODEL_PATH)}\n", style="white")
         t.append("  contamination ", style="dim")
-        t.append("0.05 / 1.0\n\n", style="cyan")
+        t.append(f"{_model_if._contamination:.4f} / 1.0\n\n", style="cyan")
 
         t.append("XGBoost\n", style="bold yellow")
         t.append("  Statut        ", style="dim")
@@ -86,11 +99,11 @@ class _MLContent(Static):
 
         t.append("Autoencoder\n", style="bold blue")
         t.append("  Statut        ", style="dim")
-        t.append("non entraine\n", style="red")  # TODO: lire depuis model_ae
+        t.append(f"{ae_status}\n", style=ae_color)
         t.append("  Dernier entr. ", style="dim")
-        t.append("--/--/----\n", style="white")
+        t.append(f"{_mtime(_model_ae.MODEL_PATH)}\n", style="white")
         t.append("  Seuil         ", style="dim")
-        t.append("--\n", style="cyan")
+        t.append(f"{ae_threshold}\n", style="cyan")
         return t
 
 
@@ -115,8 +128,8 @@ class AnomaliesPopup(ModalScreen):
             yield Label("[dim]Montre les anomalies confirmees retrouvees dans buffer.db[/dim]\n", markup=True)
             table = DataTable()
             table.add_columns("Timestamp", "Source IP", "Modele", "Score")
-            # TODO: remplacer par requete SQLite reelle
-            table.add_rows([("--:--:--", "-", "-", "-")])
+            rows = get_anomalies(50)
+            table.add_rows(rows if rows else [("--:--:--", "-", "-", "-")])
             yield table
             yield Label("\n[dim]Echap pour fermer[/dim]", markup=True)
 
@@ -142,8 +155,15 @@ class DBPopup(ModalScreen):
             yield Label("[dim]Browse la base de donnees librement en direct[/dim]\n", markup=True)
             table = DataTable()
             table.add_columns("ID", "Source", "Timestamp", "Apercu")
-            # TODO: remplacer par requete SQLite reelle
-            table.add_rows([("-", "-", "-", "-")])
+            raw_rows = get_events(50)
+            if raw_rows:
+                formatted = [
+                    (str(r[0]), r[1], r[2], json.loads(r[3]).get("src_ip", r[3][:30]) if r[1] == "zeek" else r[3][:30])
+                    for r in raw_rows
+                ]
+            else:
+                formatted = [("-", "-", "-", "-")]
+            table.add_rows(formatted)
             yield table
             yield Label("\n[dim]Echap pour fermer[/dim]", markup=True)
 
@@ -572,8 +592,18 @@ class SentinelTUI(App):
     def _redis_loop(self):
         """Boucle Redis BLPOP dans un thread separe — met a jour le TUI via call_from_thread"""
         from src.logger import logger
+        from src.model_if import run_isolation_forest, init_if
+        import src.model_if as _model_if
+        from src.model_xgb import run_xgb
+        from src.model_ae import run_ae, init_ae
+
+        init_if()
+        init_ae()
+        zeek_window = deque(maxlen=30000)
+
         r = connect_redis()
         counters = self.query_one(Counters)
+        workers  = self.query_one(Travailleurs)
 
         while True:
             result = r.blpop(os.getenv("REDIS_KEY"), timeout=0)
@@ -606,8 +636,18 @@ class SentinelTUI(App):
                     "timestamp": data.get("@timestamp"),
                 }
                 store_event("zeek", parsed)
+                zeek_window.append(parsed)
                 self.call_from_thread(counters.record, "zeek")
                 logger.info(f"Zeek    {parsed['src_ip']} → {parsed['dst_ip']}  port {parsed['dst_port']}")
+
+                if _model_if.loaded_from_disk or len(zeek_window) >= _model_if.TRAIN_THRESHOLD:
+                    flagged = run_isolation_forest(zeek_window)
+                    if flagged:
+                        confirmed = max(run_xgb(flagged) or 0, run_ae(flagged) or 0)
+                        if confirmed > 0:
+                            self.call_from_thread(
+                                workers.__setattr__, "anomalies", workers.anomalies + confirmed
+                            )
 
             elif "beats_input_codec_plain_applied" in tags:
                 dump_sqlite(data)

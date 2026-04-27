@@ -23,6 +23,15 @@ def init_db():
             raw       TEXT NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS anomalies (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            src_ip    TEXT,
+            model     TEXT NOT NULL,
+            score     TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -43,6 +52,31 @@ def flush_events():
     conn.execute("DELETE FROM events")
     conn.commit()
     conn.close()
+
+def store_anomaly(src_ip: str, model: str, score: str):
+    """
+    Stocke une anomalie confirmee par IF+XGB ou IF+AE
+    """
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("INSERT INTO anomalies (src_ip, model, score) VALUES (?, ?, ?)", (src_ip, model, score))
+    conn.commit()
+    conn.close()
+
+def get_anomalies(limit: int = 50) -> list:
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        "SELECT timestamp, src_ip, model, score FROM anomalies ORDER BY id DESC LIMIT ?", (limit,)
+    ).fetchall()
+    conn.close()
+    return rows
+
+def get_events(limit: int = 50) -> list:
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        "SELECT id, source, timestamp, raw FROM events ORDER BY id DESC LIMIT ?", (limit,)
+    ).fetchall()
+    conn.close()
+    return rows
 
 def dump_sqlite(data: dict):
     """

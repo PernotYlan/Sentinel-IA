@@ -1,6 +1,7 @@
 import numpy as np
 import pickle
 import os
+from src.db import store_anomaly
 from src.logger import logger
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -51,13 +52,13 @@ def init_ae():
     observer.daemon = True
     observer.start()
 
-def run_ae(flagged_events: list):
+def run_ae(flagged_events: list) -> int:
     """
     Score les evenements deja flagges par IF avec l'autoencoder
     Anomalie = erreur de reconstruction > seuil
     """
     if model is None or scaler is None:
-        return
+        return 0
 
     features = np.array([
         [
@@ -79,5 +80,9 @@ def run_ae(flagged_events: list):
 
     if anomalies > 0:
         logger.warning(f"[AE] {anomalies} anomalie(s) confirmee(s) sur {len(flagged_events)} evenements suspects")
+        for i, err in enumerate(errors):
+            if err > threshold and i < len(flagged_events):
+                store_anomaly(flagged_events[i].get("src_ip", "-"), "AE", f"{err:.6f}")
     else:
         logger.info("[AE] Faux positif IF - aucune anomalie confirmee")
+    return anomalies
