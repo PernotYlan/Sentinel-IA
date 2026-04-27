@@ -12,7 +12,7 @@ TRAIN_THRESHOLD = 30000
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "../train/if_model.pkl")
 
-model            = IsolationForest(contamination=0.05, random_state=42)
+model            = IsolationForest(contamination=0.01, random_state=42)
 trained          = False
 loaded_from_disk = False
 # //TODO: determine the contamination lvl, this should be determined by SOC...
