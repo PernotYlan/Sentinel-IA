@@ -21,6 +21,9 @@ def _load_model():
     if not os.path.exists(MODEL_PATH) or not os.path.exists(SCALER_PATH):
         return
     try:
+        import logging as _logging
+        _logging.getLogger("tensorflow").setLevel(_logging.ERROR)
+        _logging.getLogger("keras").setLevel(_logging.ERROR)
         from tensorflow import keras
         model = keras.models.load_model(MODEL_PATH)
         with open(SCALER_PATH, "rb") as f:
