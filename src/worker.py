@@ -52,5 +52,10 @@ def stop_workers(n: int):
     """
     Envoie n signaux d'arret dans la queue pour stopper les workers proprement
     """
+    while not _event_queue.empty():
+        try:
+            _event_queue.get_nowait()
+        except queue.Empty:
+            break
     for _ in range(n):
         _event_queue.put(None)
