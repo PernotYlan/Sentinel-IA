@@ -12,16 +12,19 @@ from src.model_if import init_if
 # // TODO: migrer vers multiprocessing quand ML sera reactivee (IF zeek_window reste Container 1, XGB+AE dans Container 2)
 N_WORKERS = 3
 
+_workers = []
+
 def main():
     """
     Execution de la boucle de logique principale
     """
+    global _workers
     check_for_environment()
     ## TODO: add a return to check_for_environment() to handle in case of error
     init_db()
     init_ae()
     init_if()
-    start_workers(N_WORKERS)
+    _workers = start_workers(N_WORKERS)
     r = connect_redis()
     receiver_redis(r)
 
@@ -31,3 +34,8 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logger.info("Arrêt du sentinel")
         stop_workers(N_WORKERS)
+        try:
+            for t in _workers:
+                t.join(timeout=5)
+        except KeyboardInterrupt:
+            pass

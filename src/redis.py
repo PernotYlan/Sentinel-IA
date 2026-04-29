@@ -46,7 +46,9 @@ def receiver_redis(r: redis.Redis):
     load_dotenv(".env")
     while True:
         try:
-            result = r.blpop(os.getenv("REDIS_KEY"), timeout=0)
+            result = r.blpop(os.getenv("REDIS_KEY"), timeout=5)
+            if result is None:
+                continue
             _, raw = result
             get_queue().put(raw)
         except redis.exceptions.ConnectionError as e:
