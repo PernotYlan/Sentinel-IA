@@ -10,8 +10,7 @@ from watchdog.events import FileSystemEventHandler
 
 load_dotenv(".env")
 
-TRAIN_THRESHOLD = 30000
-# //TODO: determine the TRAIN_THRESHOLD -> maybe add to .env and param at start?
+TRAIN_THRESHOLD = int(os.getenv("IF_TRAIN_THRESHOLD", "30000"))
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "../train/if_model.pkl")
 
