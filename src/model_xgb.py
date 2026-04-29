@@ -7,17 +7,30 @@ import os
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "../train/xgb_model.json")
 
-model = XGBClassifier()
-model.load_model(MODEL_PATH)
+_model = None
+
+
+def _load_model():
+    global _model
+    if not os.path.exists(MODEL_PATH):
+        return
+    try:
+        m = XGBClassifier()
+        m.load_model(MODEL_PATH)
+        _model = m
+        logger.info("[XGB] Modele charge")
+    except Exception as e:
+        logger.error(f"[XGB] Erreur chargement modele: {e}")
+
+_load_model()
+
 
 def run_xgb(flagged_events: list) -> int:
-    """
-    Score les evenements deja flagges par IF avec XGBoost pre-entraine
-    0 = normal, 1 = attaque confirme
-    """
+    if _model is None:
+        return 0
     features = extract_xgb(flagged_events)
     X = np.array(features)
-    scores = model.predict(X)
+    scores = _model.predict(X)
     confirmed = int(np.sum(scores))
     if confirmed > 0:
         logger.warning(f"[XGB] {confirmed} attaque(s) confirmee(s) sur {len(flagged_events)} evenements suspects")

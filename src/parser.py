@@ -4,8 +4,7 @@ from src.db import dump_sqlite, store_event
 from src.logger import logger
 from src.model_if import run_isolation_forest
 import src.model_if as _model_if
-from src.model_xgb import run_xgb
-from src.model_ae import run_ae
+from src.worker import submit_flagged
 
 counters = {"zeek": 0, "syslog": 0, "db": 0}
 
@@ -50,8 +49,7 @@ def parsing_service_selector(raw: str):
         if _model_if.loaded_from_disk or len(zeek_window) >= _model_if.TRAIN_THRESHOLD:
             flagged = run_isolation_forest(zeek_window)
             if flagged:
-                run_xgb(flagged)
-                run_ae(flagged)
+                submit_flagged(flagged)
     elif "beats_input_codec_plain_applied" in tags:
         parse_syslog(data)
         counters["syslog"] += 1

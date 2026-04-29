@@ -1,7 +1,7 @@
 import redis
 import time
 from dotenv import load_dotenv
-from src.worker import get_queue
+from src.parser import parsing_service_selector
 from src.logger import logger
 import os
 
@@ -50,7 +50,7 @@ def receiver_redis(r: redis.Redis):
             if result is None:
                 continue
             _, raw = result
-            get_queue().put(raw)
+            parsing_service_selector(raw)
         except redis.exceptions.ConnectionError as e:
             logger.error(f"Connexion Redis perdue: {e} — reconnexion...")
             r = connect_redis()

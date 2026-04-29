@@ -1,61 +1,48 @@
-import threading
-import queue
-from src.parser import parsing_service_selector
+import multiprocessing
 from src.logger import logger
 
-# // TODO: Migrer vers multiprocessing.Queue quand le serveur sera disponible (2 coeurs)
-# // TODO: Container 1 = consumer + zeek_window + IF, Container 2 = workers XGB + AE
-# // TODO: N_WORKERS cible = 4 workers sur 2 coeurs (2 workers/coeur)
-_event_queue: queue.Queue = queue.Queue()
+# // TODO: Container 1 = main process (Redis + zeek_window + IF), Container 2 = workers (XGB + AE)
+# // TODO: passer N_WORKERS a 4 quand benchmark confirme le gain sur 2 coeurs
 
-def get_queue() -> queue.Queue:
-    """
-    Retourne la queue partagee entre le producteur et les workers
-    """
-    return _event_queue
+_pool = None
+_worker_id = None
+_id_counter = multiprocessing.Value('i', 0)
 
-def _worker_loop(worker_id: int):
-    """
-    Boucle d'un worker: consomme les evenements de la queue et les traite
-    """
-    # // TODO: remplacer threading par multiprocessing.Process ici pour vrai parallelisme ML
-    logger.info(f"[Worker-{worker_id}] Demarrage")
-    while True:
-        try:
-            raw = _event_queue.get(timeout=1)
-            if raw is None:
-                logger.info(f"[Worker-{worker_id}] Signal d'arret recu")
-                break
-            logger.info(f"[Worker-{worker_id}] Traitement evenement (queue: {_event_queue.qsize()})")
-            parsing_service_selector(raw)
-            _event_queue.task_done()
-        except queue.Empty:
-            continue
-        except Exception as e:
-            logger.error(f"[Worker-{worker_id}] Erreur traitement evenement: {e}")
-            _event_queue.task_done()
 
-def start_workers(n: int = 3) -> list[threading.Thread]:
-    """
-    Demarre n threads workers et retourne la liste des threads
-    """
-    # // TODO: passer a 4 workers quand 2 coeurs disponibles sur le serveur
-    threads = []
-    for i in range(n):
-        t = threading.Thread(target=_worker_loop, args=(i,), daemon=True, name=f"Worker-{i}")
-        t.start()
-        threads.append(t)
+def _worker_init():
+    import signal
+    global _worker_id
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    with _id_counter.get_lock():
+        _worker_id = _id_counter.value
+        _id_counter.value += 1
+    from src.db import init_db
+    from src.model_ae import init_ae
+    import src.model_xgb
+    init_db()
+    init_ae()
+
+
+def _process_flagged(flagged: list):
+    from src.model_xgb import run_xgb
+    from src.model_ae import run_ae
+    logger.info(f"[Worker-{_worker_id}] Traitement de {len(flagged)} evenement(s) suspects")
+    run_xgb(flagged)
+    run_ae(flagged)
+
+
+def start_workers(n: int = 3):
+    global _pool
+    _pool = multiprocessing.Pool(processes=n, initializer=_worker_init)
     logger.info(f"[Workers] {n} worker(s) demarre(s)")
-    return threads
 
-def stop_workers(n: int):
-    """
-    Envoie n signaux d'arret dans la queue pour stopper les workers proprement
-    """
-    while not _event_queue.empty():
-        try:
-            _event_queue.get_nowait()
-        except queue.Empty:
-            break
-    for _ in range(n):
-        _event_queue.put(None)
+
+def submit_flagged(flagged: list):
+    if _pool and flagged:
+        _pool.apply_async(_process_flagged, args=(flagged,))
+
+
+def stop_workers():
+    if _pool:
+        _pool.terminate()
+        _pool.join()
