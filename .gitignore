@@ -10,3 +10,5 @@ test
 *.log
 *.pkl
 *.keras
+*.txt
+
