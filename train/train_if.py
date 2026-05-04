@@ -71,8 +71,8 @@ def main():
 
     print(f"Modele sauvegarde: {MODEL_OUT}")
 
-    # flush_events()
-    # print("Table events videe pour le prochain cycle.")
+    flush_events()
+    print("Table events videe pour le prochain cycle.")
 
 if __name__ == "__main__":
     main()
