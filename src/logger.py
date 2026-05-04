@@ -26,17 +26,3 @@ try:
 except (OSError, PermissionError):
     # Hors Docker le chemin /app n'existe pas dcp on log sur stdout
     pass
-
-
-def add_tui_handler(handler: logging.Handler):
-    """
-    Injecte le handler TUI apres le demarrage de l'interface.
-    Appele depuis tui.py une fois l'app Textual lancee.
-    """
-    handler.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
-    logger.addHandler(handler)
-
-
-def remove_tui_handler(handler: logging.Handler):
-    """Retire le handler TUI a la fermeture de l'interface."""
-    logger.removeHandler(handler)
