@@ -1,6 +1,6 @@
 import json
 from collections import deque
-from src.db import dump_sqlite, store_event
+from src.db import dump_sqlite, store_event, store_syslog
 from src.logger import logger
 from src.model_if import run_isolation_forest
 import src.model_if as _model_if
@@ -31,7 +31,12 @@ def parse_zeek(data: dict) -> dict:
     }
 
 def parse_syslog(data: dict):
-    dump_sqlite(data)
+    store_syslog(
+        timestamp=data.get("@timestamp"),
+        hostname=(data.get("host") or {}).get("name", "unknown"),
+        tenant_id=data.get("tenant_id"),
+        raw=data,
+    )
 
 def parsing_service_selector(raw: str):
     """

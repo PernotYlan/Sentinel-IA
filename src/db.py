@@ -46,6 +46,15 @@ def init_db():
             raw       JSONB NOT NULL
         )
     """)
+    _exec(f"""
+        CREATE TABLE IF NOT EXISTS "{_CLIENT_ID}".syslog (
+            id         SERIAL PRIMARY KEY,
+            timestamp  TIMESTAMPTZ NOT NULL,
+            hostname   TEXT NOT NULL,
+            tenant_id  TEXT,
+            raw        JSONB NOT NULL
+        )
+    """)
 
 
 def _exec(query: str, params=None):
@@ -100,6 +109,17 @@ def get_events(limit: int = 50) -> list:
             return cur.fetchall()
     finally:
         _pg_pool.putconn(conn)
+
+
+def store_syslog(timestamp: str, hostname: str, tenant_id: str, raw: dict):
+    _exec(
+        f'INSERT INTO "{_CLIENT_ID}".syslog (timestamp, hostname, tenant_id, raw) VALUES (%s, %s, %s, %s)',
+        (timestamp, hostname, tenant_id, json.dumps(raw))
+    )
+
+
+def flush_syslog_old(days: int = 30):
+    _exec(f"DELETE FROM \"{_CLIENT_ID}\".syslog WHERE timestamp < NOW() - INTERVAL '{days} days'")
 
 
 def dump_sqlite(data: dict):
