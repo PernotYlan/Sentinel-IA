@@ -1,35 +1,41 @@
 #!/usr/bin/env python3
 """
-Script d'entrainement Isolation Forest sur les evenements Zeek stockes dans buffer.db
+Script d'entrainement Isolation Forest sur les evenements Zeek stockes dans PostgreSQL
 Genere if_model.pkl dans train/
 Premier lancement: apres 30k evenements
 Relance: toutes les 2 semaines via cron, flush de la table events apres
 """
 
-import sqlite3
 import json
 import numpy as np
 import pickle
 import os
 import sys
 sys.path.insert(0, "/app")
+import psycopg2
 from dotenv import load_dotenv
 from sklearn.ensemble import IsolationForest
 from src.db import flush_events
 
 load_dotenv(".env")
 
-MODEL_OUT = os.path.join(os.path.dirname(__file__), "if_model.pkl")
-DB_PATH   = "buffer.db"
+MODEL_OUT  = os.path.join(os.path.dirname(__file__), "if_model.pkl")
+CLIENT_ID  = os.getenv("CLIENT_ID", "default")
+
 
 def load_events() -> np.ndarray:
-    """
-    Charge tous les evenements Zeek depuis la table events de buffer.db
-    Retourne un tableau numpy de shape (n_evenements, 7)
-    """
-    print("Chargement des evenements Zeek depuis buffer.db...")
-    conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute("SELECT raw FROM events WHERE source = 'zeek'").fetchall()
+    print(f"Chargement des evenements Zeek depuis PostgreSQL (schema: {CLIENT_ID})...")
+    conn = psycopg2.connect(
+        host=os.getenv("PG_HOST"),
+        port=int(os.getenv("PG_PORT", 5432)),
+        dbname=os.getenv("PG_DB"),
+        user=os.getenv("PG_USER"),
+        password=os.getenv("PG_PASSWORD"),
+    )
+    cur = conn.cursor()
+    cur.execute(f'SELECT raw FROM "{CLIENT_ID}".events WHERE source = %s', ('zeek',))
+    rows = cur.fetchall()
+    cur.close()
     conn.close()
 
     if not rows:
@@ -38,7 +44,7 @@ def load_events() -> np.ndarray:
 
     data = []
     for (raw,) in rows:
-        e = json.loads(raw)
+        e = raw if isinstance(raw, dict) else json.loads(raw)
         data.append([
             e.get("orig_bytes") or 0,
             e.get("resp_bytes") or 0,
@@ -52,6 +58,7 @@ def load_events() -> np.ndarray:
     print(f"{len(data)} evenements charges.")
     return np.array(data, dtype=np.float32)
 
+
 def main():
     X = load_events()
 
@@ -64,8 +71,8 @@ def main():
 
     print(f"Modele sauvegarde: {MODEL_OUT}")
 
-    flush_events()
-    print("Table events videe pour le prochain cycle.")
+    # flush_events()
+    # print("Table events videe pour le prochain cycle.")
 
 if __name__ == "__main__":
     main()
