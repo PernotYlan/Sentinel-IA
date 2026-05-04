@@ -31,11 +31,24 @@ def parse_zeek(data: dict) -> dict:
     }
 
 def parse_syslog(data: dict):
+    hostname  = (data.get("host") or {}).get("name", "unknown")
+    tenant_id = data.get("tenant_id")
+    timestamp = data.get("@timestamp")
+
+    inner = {}
+    message = data.get("message", "")
+    brace_idx = message.find("{")
+    if brace_idx != -1:
+        try:
+            inner = json.loads(message[brace_idx:])
+        except Exception:
+            pass
+
     store_syslog(
-        timestamp=data.get("@timestamp"),
-        hostname=(data.get("host") or {}).get("name", "unknown"),
-        tenant_id=data.get("tenant_id"),
-        raw=data,
+        timestamp=timestamp,
+        hostname=hostname,
+        tenant_id=tenant_id,
+        raw={"hostname": hostname, "tenant_id": tenant_id, "timestamp": timestamp, "metrics": inner},
     )
 
 def parsing_service_selector(raw: str):
