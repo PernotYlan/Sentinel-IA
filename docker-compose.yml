@@ -4,8 +4,6 @@ services:
     stdin_open: true
     tty: true
     network_mode: host
-    environment:
-      - TEST_TRAINING=1
     volumes:
       - .:/app
 

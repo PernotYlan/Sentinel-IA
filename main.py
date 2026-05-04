@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import os
 import signal
-import threading
 import time
 
 def _handle_sigterm(sig, frame):
@@ -16,20 +15,7 @@ from src.logger import logger
 from src.model_if import init_if
 import src.parser as _parser
 
-RED   = "\033[91m"
-CYAN  = "\033[96m"
-RESET = "\033[0m"
-
 _start_time = None
-
-
-def _test_training():
-    for i in range(10):
-        print(f"{RED}[TEST] Pre-entrainement IF — message {i+1}/10{RESET}", flush=True)
-    import train.train_ae as _train_ae
-    _train_ae.main()
-    for i in range(10):
-        print(f"{CYAN}[TEST] Post-entrainement IF — message {i+1}/10{RESET}", flush=True)
 
 
 def main():
@@ -38,8 +24,6 @@ def main():
     check_for_environment()
     init_db()
     init_if()
-    if os.getenv("TEST_TRAINING") == "1":
-        threading.Timer(10.0, _test_training).start()
     r = connect_redis()
     receiver_redis(r)
 
