@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow import keras
 from tensorflow.keras import layers
-from src.db import flush_events
+from src.db import flush_events, flush_syslog_old
 
 load_dotenv(".env")
 
@@ -100,7 +100,8 @@ def main():
     print(f"Scaler sauvegarde: {SCALER_OUT}")
 
     flush_events()
-    print("Table events videe pour le prochain cycle.")
+    flush_syslog_old()
+    print("Table events et syslog vides pour le prochain cycle.")
 
 if __name__ == "__main__":
     main()
