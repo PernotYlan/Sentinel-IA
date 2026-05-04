@@ -1,19 +1,35 @@
 #!/usr/bin/env python3
-import multiprocessing
+import os
+import signal
+import threading
 import time
+
+def _handle_sigterm(sig, frame):
+    raise KeyboardInterrupt
+
+signal.signal(signal.SIGTERM, _handle_sigterm)
 
 from src.env import check_for_environment
 from src.redis import connect_redis, receiver_redis
 from src.db import init_db
-from src.worker import start_workers, stop_workers
 from src.logger import logger
 from src.model_if import init_if
 import src.parser as _parser
 
-# // TODO: passer N_WORKERS a 4 quand benchmark confirme le gain sur 2 coeurs
-N_WORKERS = 3
+RED   = "\033[91m"
+CYAN  = "\033[96m"
+RESET = "\033[0m"
 
 _start_time = None
+
+
+def _test_training():
+    for i in range(10):
+        print(f"{RED}[TEST] Pre-entrainement IF — message {i+1}/10{RESET}", flush=True)
+    import train.train_ae as _train_ae
+    _train_ae.main()
+    for i in range(10):
+        print(f"{CYAN}[TEST] Post-entrainement IF — message {i+1}/10{RESET}", flush=True)
 
 
 def main():
@@ -22,13 +38,13 @@ def main():
     check_for_environment()
     init_db()
     init_if()
-    start_workers(N_WORKERS)
+    if os.getenv("TEST_TRAINING") == "1":
+        threading.Timer(10.0, _test_training).start()
     r = connect_redis()
     receiver_redis(r)
 
 
 if __name__ == "__main__":
-    multiprocessing.set_start_method('spawn')
     try:
         main()
     except KeyboardInterrupt:
@@ -36,4 +52,3 @@ if __name__ == "__main__":
         zeek = _parser.counters["zeek"]
         rate = zeek / elapsed if elapsed > 0 else 0
         logger.info(f"Arret — {zeek} events Zeek | {elapsed:.1f} min | {rate:.0f} events/min")
-        stop_workers()

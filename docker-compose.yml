@@ -1,8 +1,19 @@
 services:
-  sentinel:
+  sentinel-core:
     build: .
     stdin_open: true
     tty: true
     network_mode: host
+    environment:
+      - TEST_TRAINING=1
+    volumes:
+      - .:/app
+
+  sentinel-workers:
+    build: .
+    stdin_open: true
+    tty: true
+    network_mode: host
+    entrypoint: ["python3", "worker_main.py"]
     volumes:
       - .:/app
