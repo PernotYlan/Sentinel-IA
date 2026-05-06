@@ -35,8 +35,8 @@ def run_xgb(flagged_events: list) -> int:
     if confirmed > 0:
         logger.warning(f"[XGB] {confirmed} attaque(s) confirmee(s) sur {len(flagged_events)} evenements suspects")
         for i, s in enumerate(scores):
-            if s == 1 and i < len(flagged_events):
-                store_anomaly(flagged_events[i].get("src_ip", "-"), "XGB", "1")
+            if s != 0 and i < len(flagged_events):
+                store_anomaly(flagged_events[i].get("src_ip", "-"), "XGB", str(int(s)))
     else:
         logger.info("[XGB] Faux positif IF - aucune attaque confirmee")
     return confirmed
