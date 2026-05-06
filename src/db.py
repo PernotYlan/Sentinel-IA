@@ -32,11 +32,22 @@ def init_db():
     """)
     _exec(f"""
         CREATE TABLE IF NOT EXISTS "{_CLIENT_ID}".anomalies (
-            id        SERIAL PRIMARY KEY,
-            timestamp TIMESTAMPTZ DEFAULT NOW(),
-            src_ip    TEXT,
-            model     TEXT NOT NULL,
-            score     TEXT
+            id          SERIAL PRIMARY KEY,
+            timestamp   TIMESTAMPTZ DEFAULT NOW(),
+            model       TEXT NOT NULL,
+            attack_type TEXT,
+            score       TEXT,
+            src_ip      TEXT,
+            dst_ip      TEXT,
+            src_port    INT,
+            dst_port    INT,
+            proto       TEXT,
+            service     TEXT,
+            conn_state  TEXT,
+            duration    FLOAT,
+            orig_bytes  BIGINT,
+            resp_bytes  BIGINT,
+            raw         JSONB
         )
     """)
     _exec(f"""
@@ -78,11 +89,33 @@ def flush_events():
     _exec(f'DELETE FROM "{_CLIENT_ID}".events')
 
 
-def store_anomaly(src_ip: str, model: str, score: str):
-    _exec(
-        f'INSERT INTO "{_CLIENT_ID}".anomalies (src_ip, model, score) VALUES (%s, %s, %s)',
-        (src_ip, model, score)
-    )
+def store_anomalies_batch(rows: list):
+    if not rows:
+        return
+    params = [
+        (
+            model, attack_type, score,
+            event.get("src_ip"), event.get("dst_ip"),
+            event.get("src_port"), event.get("dst_port"),
+            event.get("proto"), event.get("service"), event.get("conn_state"),
+            event.get("duration"), event.get("orig_bytes"), event.get("resp_bytes"),
+            json.dumps(event),
+        )
+        for model, event, attack_type, score in rows
+    ]
+    conn = _pg_pool.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.executemany(
+                f"""INSERT INTO "{_CLIENT_ID}".anomalies
+                    (model, attack_type, score, src_ip, dst_ip, src_port, dst_port,
+                     proto, service, conn_state, duration, orig_bytes, resp_bytes, raw)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                params
+            )
+        conn.commit()
+    finally:
+        _pg_pool.putconn(conn)
 
 
 def get_anomalies(limit: int = 50) -> list:

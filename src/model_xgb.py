@@ -1,23 +1,29 @@
+import json
 from xgboost import XGBClassifier
 from src.features import extract_xgb
-from src.db import store_anomaly
+from src.db import store_anomalies_batch
 from src.logger import logger
 import numpy as np
 import os
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "../train/xgb_model.json")
+MODEL_PATH  = os.path.join(os.path.dirname(__file__), "../train/xgb_model.json")
+LABELS_PATH = os.path.join(os.path.dirname(__file__), "../train/xgb_labels.json")
 
-_model = None
+_model  = None
+_labels = {}  # {0: "Normal", 1: "DoS", ...}
 
 
 def _load_model():
-    global _model
+    global _model, _labels
     if not os.path.exists(MODEL_PATH):
         return
     try:
         m = XGBClassifier()
         m.load_model(MODEL_PATH)
         _model = m
+        if os.path.exists(LABELS_PATH):
+            with open(LABELS_PATH) as f:
+                _labels = {int(k): v for k, v in json.load(f).items()}
         logger.info("[XGB] Modele charge")
     except Exception as e:
         logger.error(f"[XGB] Erreur chargement modele: {e}")
@@ -31,12 +37,14 @@ def run_xgb(flagged_events: list) -> int:
     features = extract_xgb(flagged_events)
     X = np.array(features)
     scores = _model.predict(X)
-    confirmed = int(np.sum(scores))
+    confirmed = int(np.sum(scores != 0))
     if confirmed > 0:
         logger.warning(f"[XGB] {confirmed} attaque(s) confirmee(s) sur {len(flagged_events)} evenements suspects")
-        for i, s in enumerate(scores):
-            if s != 0 and i < len(flagged_events):
-                store_anomaly(flagged_events[i].get("src_ip", "-"), "XGB", str(int(s)))
+        store_anomalies_batch([
+            ("XGB", flagged_events[i], _labels.get(int(s), str(int(s))), None)
+            for i, s in enumerate(scores)
+            if s != 0 and i < len(flagged_events)
+        ])
     else:
         logger.info("[XGB] Faux positif IF - aucune attaque confirmee")
     return confirmed

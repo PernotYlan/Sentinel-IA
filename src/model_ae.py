@@ -1,7 +1,7 @@
 import numpy as np
 import pickle
 import os
-from src.db import store_anomaly
+from src.db import store_anomalies_batch
 from src.logger import logger
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -83,9 +83,11 @@ def run_ae(flagged_events: list) -> int:
 
     if anomalies > 0:
         logger.warning(f"[AE] {anomalies} anomalie(s) confirmee(s) sur {len(flagged_events)} evenements suspects")
-        for i, err in enumerate(errors):
-            if err > threshold and i < len(flagged_events):
-                store_anomaly(flagged_events[i].get("src_ip", "-"), "AE", f"{err:.6f}")
+        store_anomalies_batch([
+            ("AE", flagged_events[i], None, f"{err:.6f}")
+            for i, err in enumerate(errors)
+            if err > threshold and i < len(flagged_events)
+        ])
     else:
         logger.info("[AE] Faux positif IF - aucune anomalie confirmee")
     return anomalies
