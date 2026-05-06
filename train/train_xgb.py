@@ -1,115 +1,105 @@
 #!/usr/bin/env python3
 """
-Script d'entrainement XGBoost sur NSL-KDD + CICIDS2017
-Genere un modele pre-entraine sauvegarde dans train/xgb_model.json
+Script d'entrainement XGBoost multiclasse sur UNSW-NB15
+Genere xgb_model.json et xgb_labels.json dans train/
+
+Fichiers attendus dans train/data/:
+  UNSW_NB15_training-set.csv (telecharge depuis Hugging Face Mouwiya/UNSW-NB15)
 """
 
-import pandas as pd
+import json
 import numpy as np
-from xgboost import XGBClassifier
-from sklearn.metrics import classification_report
-import glob
+import pandas as pd
 import os
+import sys
+sys.path.insert(0, "/app")
+from dotenv import load_dotenv
+from xgboost import XGBClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+from src.features import encode
 
-# Chemins des datasets
-NSLKDD_TRAIN = os.path.expanduser("~/Documents/NSLKDD/KDDTrain+.txt")
-NSLKDD_TEST  = os.path.expanduser("~/Documents/NSLKDD/KDDTest+.txt")
-CICIDS_DIR   = os.path.expanduser("~/Documents/CICIDS2017/MachineLearningCVE/")
-MODEL_OUT    = os.path.join(os.path.dirname(__file__), "xgb_model.json")
+load_dotenv(".env")
 
-# Features cibles (memes que src/features.py extract_xgb)
-FEATURES = ["orig_bytes", "resp_bytes", "duration", "orig_pkts", "resp_pkts",
-            "src_port", "dst_port", "proto", "service", "conn_state"]
+MODEL_OUT  = os.path.join(os.path.dirname(__file__), "xgb_model.json")
+LABELS_OUT = os.path.join(os.path.dirname(__file__), "xgb_labels.json")
+DATA_DIR   = os.path.join(os.path.dirname(__file__), "data")
 
-def encode(series: pd.Series) -> pd.Series:
-    return series.astype(str).apply(lambda x: hash(x) % 1000)
 
-# --- NSL-KDD ---
-def load_nslkdd(path: str) -> pd.DataFrame:
-    print(f"Chargement NSL-KDD: {path}")
-    cols = ["duration", "proto", "service", "conn_state", "orig_bytes", "resp_bytes",
-            "land", "wrong_fragment", "urgent", "hot",
-            "num_failed_logins", "logged_in", "num_compromised", "root_shell",
-            "su_attempted", "num_root", "num_file_creations", "num_shells",
-            "num_access_files", "num_outbound_cmds", "is_host_login",
-            "is_guest_login", "count", "srv_count", "serror_rate",
-            "srv_serror_rate", "rerror_rate", "srv_rerror_rate", "same_srv_rate",
-            "diff_srv_rate", "srv_diff_host_rate", "dst_host_count",
-            "dst_host_srv_count", "dst_host_same_srv_rate", "dst_host_diff_srv_rate",
-            "dst_host_same_src_port_rate", "dst_host_srv_diff_host_rate",
-            "dst_host_serror_rate", "dst_host_srv_serror_rate",
-            "dst_host_rerror_rate", "dst_host_srv_rerror_rate",
-            "label", "difficulty"]
+def load_dataset() -> pd.DataFrame:
+    path = os.path.join(DATA_DIR, "UNSW_NB15_training-set.csv")
+    if not os.path.exists(path):
+        print(f"Fichier introuvable: {path}")
+        exit(1)
+    print(f"Chargement {os.path.basename(path)}...")
+    df = pd.read_csv(path, low_memory=False)
+    df.columns = df.columns.str.strip().str.lstrip("﻿")
+    print(f"{len(df)} lignes chargees.")
+    return df
 
-    df = pd.read_csv(path, header=None, names=cols)
-    df["label"]      = (df["label"] != "normal").astype(int)
-    df["src_port"]   = 0
-    df["dst_port"]   = 0
-    df["orig_pkts"]  = 0
-    df["resp_pkts"]  = 0
-    df["proto"]      = encode(df["proto"])
-    df["service"]    = encode(df["service"])
-    df["conn_state"] = encode(df["conn_state"])
-    return df[FEATURES + ["label"]]
 
-# --- CICIDS2017 ---
-def load_cicids(directory: str) -> pd.DataFrame:
-    files = glob.glob(os.path.join(directory, "*.csv"))
-    frames = []
-    for f in files:
-        print(f"Chargement CICIDS2017: {os.path.basename(f)}")
-        df = pd.read_csv(f, low_memory=False)
-        df.columns = df.columns.str.strip()
-        out = pd.DataFrame()
-        out["orig_bytes"]  = pd.to_numeric(df.get("Total Length of Fwd Packets", 0), errors="coerce").fillna(0)
-        out["resp_bytes"]  = pd.to_numeric(df.get("Total Length of Bwd Packets", 0), errors="coerce").fillna(0)
-        out["duration"]    = pd.to_numeric(df.get("Flow Duration", 0), errors="coerce").fillna(0)
-        out["orig_pkts"]   = pd.to_numeric(df.get("Total Fwd Packets", 0), errors="coerce").fillna(0)
-        out["resp_pkts"]   = pd.to_numeric(df.get("Total Backward Packets", 0), errors="coerce").fillna(0)
-        out["src_port"]    = 0
-        out["dst_port"]    = pd.to_numeric(df.get("Destination Port", 0), errors="coerce").fillna(0)
-        out["proto"]       = 0
-        out["service"]     = 0
-        out["conn_state"]  = 0
-        out["label"]       = (df["Label"].str.strip() != "BENIGN").astype(int)
-        frames.append(out)
-    return pd.concat(frames, ignore_index=True)
+def build_features(df: pd.DataFrame) -> np.ndarray:
+    # sport/dsport absent de ce CSV — mis a 0, le modele ignorera ces features
+    return np.column_stack([
+        pd.to_numeric(df["sbytes"],  errors="coerce").fillna(0).values,
+        pd.to_numeric(df["dbytes"],  errors="coerce").fillna(0).values,
+        pd.to_numeric(df["dur"],     errors="coerce").fillna(0).values,
+        pd.to_numeric(df["spkts"],   errors="coerce").fillna(0).values,
+        pd.to_numeric(df["dpkts"],   errors="coerce").fillna(0).values,
+        np.zeros(len(df)),  # src_port
+        np.zeros(len(df)),  # dst_port
+        df["proto"].map(encode).values,
+        df["service"].map(encode).values,
+        df["state"].map(encode).values,
+    ]).astype(np.float32)
+
 
 def main():
-    # Charger et merger les deux datasets
-    nsl_train = load_nslkdd(NSLKDD_TRAIN)
-    nsl_test  = load_nslkdd(NSLKDD_TEST)
-    cicids    = load_cicids(CICIDS_DIR)
+    df = load_dataset()
 
-    train = pd.concat([nsl_train, cicids], ignore_index=True)
-    train = train.replace([np.inf, -np.inf], 0).fillna(0)
-    nsl_test = nsl_test.replace([np.inf, -np.inf], 0).fillna(0)
+    df["attack_cat"] = df["attack_cat"].fillna("Normal").astype(str).str.strip()
 
-    X_train = train[FEATURES].values
-    y_train = train["label"].values
-    X_test  = nsl_test[FEATURES].values
-    y_test  = nsl_test["label"].values
+    # Normal = 0, attacks sorted alphabetically after
+    attack_types  = sorted([c for c in df["attack_cat"].unique() if c != "Normal"])
+    categories    = ["Normal"] + attack_types
+    label_map     = {cat: i for i, cat in enumerate(categories)}
+    label_map_inv = {i: cat for i, cat in enumerate(categories)}
+    print(f"\nCategories ({len(categories)}): {categories}")
 
-    print(f"\nEntrainement sur {len(X_train)} exemples...")
-    print(f"  Normal:  {int((y_train == 0).sum())}")
-    print(f"  Attaque: {int((y_train == 1).sum())}")
+    y = df["attack_cat"].map(label_map).values.astype(int)
 
+    print("\nExtraction des features...")
+    X = build_features(df)
+    X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+
+    print(f"\nEntrainement XGBoost ({len(categories)} classes, {len(X_train)} exemples)...")
     model = XGBClassifier(
+        objective="multi:softmax",
+        num_class=len(categories),
         n_estimators=200,
         max_depth=6,
         learning_rate=0.1,
+        n_jobs=-1,
         random_state=42,
-        eval_metric="logloss",
-        n_jobs=-1
+        eval_metric="mlogloss",
     )
-    model.fit(X_train, y_train)
+    model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=10)
 
-    print("\nEvaluation sur NSL-KDD test set:")
     y_pred = model.predict(X_test)
-    print(classification_report(y_test, y_pred, target_names=["Normal", "Attaque"]))
+    print("\nRapport de classification:")
+    print(classification_report(y_test, y_pred, target_names=categories))
 
     model.save_model(MODEL_OUT)
+    with open(LABELS_OUT, "w") as f:
+        json.dump(label_map_inv, f, indent=2)
+
     print(f"\nModele sauvegarde: {MODEL_OUT}")
+    print(f"Labels sauvegardes: {LABELS_OUT}")
+
 
 if __name__ == "__main__":
     main()

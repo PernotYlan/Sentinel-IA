@@ -1,9 +1,10 @@
+import hashlib
 from collections import deque
 
 def encode(value) -> int:
     if value is None:
         return 0
-    return hash(str(value)) % 1000
+    return int(hashlib.md5(str(value).encode()).hexdigest(), 16) % 1000
 
 def extract_xgb(events: list) -> list:
     """
