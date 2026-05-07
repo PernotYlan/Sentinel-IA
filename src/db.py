@@ -66,6 +66,16 @@ def init_db():
             raw        JSONB NOT NULL
         )
     """)
+    _exec(f"""
+        CREATE TABLE IF NOT EXISTS "{_CLIENT_ID}".reports (
+            id                    SERIAL PRIMARY KEY,
+            timestamp             TIMESTAMP DEFAULT NOW(),
+            alert_count           INTEGER DEFAULT 0,
+            analysis              TEXT,
+            recommendations       JSONB,
+            high_severity_threats JSONB
+        )
+    """)
 
 
 def _exec(query: str, params=None):
