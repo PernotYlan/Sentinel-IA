@@ -10,13 +10,15 @@ counters = {"zeek": 0, "syslog": 0, "db": 0}
 
 zeek_window = deque(maxlen=30000)
 
+def _normalize_ip(ip: str) -> str:
+    if ip and ip.startswith("::ffff:"):
+        return ip[7:]
+    return ip
+
 def parse_zeek(data: dict) -> dict:
-    """
-    Extrait les champs pertinents d'un evenement Zeek brut vers un dictionnaire normalise
-    """
     return {
-        "src_ip": data.get("id.orig_h"),
-        "dst_ip": data.get("id.resp_h"),
+        "src_ip": _normalize_ip(data.get("id.orig_h")),
+        "dst_ip": _normalize_ip(data.get("id.resp_h")),
         "src_port": data.get("id.orig_p"),
         "dst_port": data.get("id.resp_p"),
         "proto": data.get("proto"),
