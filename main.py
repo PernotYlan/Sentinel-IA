@@ -8,7 +8,6 @@ def _handle_sigterm(sig, frame):
 
 signal.signal(signal.SIGTERM, _handle_sigterm)
 
-from src.env import check_for_environment
 from src.redis import connect_redis, receiver_redis
 from src.db import init_db
 from src.logger import logger
@@ -21,7 +20,6 @@ _start_time = None
 def main():
     global _start_time
     _start_time = time.time()
-    check_for_environment()
     init_db()
     init_if()
     r = connect_redis()
